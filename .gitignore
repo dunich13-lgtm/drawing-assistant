@@ -13,3 +13,6 @@ Meta-brain/.trash/
 Thumbs.db
 desktop.ini
 node_modules/
+
+# Second brain stays local only (user's choice)
+Meta-brain/

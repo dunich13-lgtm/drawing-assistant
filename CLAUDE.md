@@ -12,6 +12,7 @@ This folder holds the И4 course work (source: maitapp.com/i4/programa/day0/).
 
 ## Second brain: Meta-brain (Obsidian vault)
 - `Meta-brain/` is its own Obsidian vault. Claude reads/writes it as plain files in this folder.
+- It is LOCAL ONLY (gitignored, user's choice): never commit, push or upload its notes.
 - The Obsidian MCP tools (`mcp__obsidian__*`) are connected to a DIFFERENT vault ("Arch explanatory note", work). Don't read or change that vault for this project unless asked.
 
 ## Issue tracker: Linear
