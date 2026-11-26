@@ -7,13 +7,17 @@ This folder holds the И4 course work (source: maitapp.com/i4/programa/day0/).
 - `specs/` — one spec per feature, made with the implement-spec workflow (see below)
 - `Meta-brain/` — Obsidian vault, the "second brain" (Енграм idea). Claude may read and search it.
 - `linear/` — notes on the Linear workspace (project name, task conventions)
+- `.env` — secret keys (Gemini, OpenRouter). **Never commit it, never print it.** `.env.example` shows the variable names.
+- `scripts/check-ai-keys.ps1` — checks both keys with one tiny free request each.
+
+## Second brain: Meta-brain (Obsidian vault)
+- `Meta-brain/` is its own Obsidian vault. Claude reads/writes it as plain files in this folder.
+- The Obsidian MCP tools (`mcp__obsidian__*`) are connected to a DIFFERENT vault ("Arch explanatory note", work). Don't read or change that vault for this project unless asked.
 
 ## Issue tracker: Linear
 - Connected via the official Linear connector. Team **Nino** (key `NIN`), project **Drawing assistant**.
 - `/to-tickets` and any new tasks go to that project, in team Nino. Don't touch NIN-1…NIN-4 (Linear welcome issues).
 - Ask before deleting or bulk-changing issues.
-- `.env` — secret keys (Gemini, OpenRouter). **Never commit it, never print it.** `.env.example` shows the variable names.
-- `scripts/check-ai-keys.ps1` — checks both keys with one tiny free request each.
 
 ## AI models (outside Claude) — FREE TIER ONLY, no payments
 - Main: Google Gemini free tier (`GEMINI_*` in `.env`). Real free limits (checked 2026-11-26):
