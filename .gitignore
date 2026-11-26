@@ -1,0 +1,15 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Obsidian per-device state
+Meta-brain/.obsidian/workspace*.json
+Meta-brain/.obsidian/cache
+Meta-brain/.trash/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+node_modules/
