@@ -29,6 +29,10 @@ This folder holds the И4 course work (source: maitapp.com/i4/programa/day0/).
 - Never add billing, buy credits, or call a paid model. On rate-limit errors (HTTP 429), wait and retry, or fall back to the other provider.
 - Both use the OpenAI-style chat API, so switching provider = changing base URL, key and model.
 
+## Voice and images
+- Voice dictation: Windows built-in voice typing (Win+H, Bulgarian + English, Win+Space to switch). Dictated text may lack punctuation; read intent, not exact wording.
+- Image generation: skipped for now (no free option; kie.ai is optional per the course).
+
 ## Rules for Claude
 - Ask before installing anything or signing in. Never spend money: free tiers only.
 - Never commit keys or tokens. Check `git status` before every commit.
