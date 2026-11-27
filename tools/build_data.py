@@ -14,6 +14,7 @@ Usage: python tools/build_data.py <project> [--no-stack] [--min-match 0.3]
 import argparse
 import collections
 import json
+import math
 import os
 import sys
 
@@ -233,6 +234,56 @@ def main():
                                  'height_source': f"wall top of {o['view']}"})
                 infill += 1
 
+    # ---- window and door objects in the openings (NIN-13): frame + glass / frame + closed leaf -----------------
+    objects = 0
+    if pj.get('profile') == 'building' and os.path.exists(opath):
+        FW, FD = 0.06, 0.07                     # frame width (face) and depth (across the wall)
+        MAT = {'frame': ['DWG window frame', [236, 236, 232], None, 'DWG windows'],
+               'glass': ['DWG glass', [150, 190, 220], 0.35, 'DWG glass'],
+               'door': ['DWG door', [150, 112, 74], None, 'DWG doors'],
+               'dframe': ['DWG door frame', [120, 90, 60], None, 'DWG doors']}
+        for o in json.load(open(opath, encoding='utf-8'))['openings']:
+            if o['kind'] not in ('window', 'door') or o['sill'] is None or o['head'] is None or o['view'] not in offsets:
+                continue
+            c = o['outline'][:4]
+            sides = [(c[i], c[(i + 1) % 4]) for i in range(4)]
+            L = o['length_m']
+            # the side whose length matches the opening length runs along the opening
+            i0 = min(range(4), key=lambda i: abs(math.dist(*sides[i]) - L))
+            A, B = sides[i0]
+            D = c[(i0 + 3) % 4]                 # A's other neighbour: across the wall
+            Lr, T = math.dist(A, B), math.dist(A, D)
+            if Lr < 0.3 or T < 0.03:
+                continue
+            u = ((B[0] - A[0]) / Lr, (B[1] - A[1]) / Lr)
+            w = ((D[0] - A[0]) / T, (D[1] - A[1]) / T)
+            def rect(s0, s1, d0, d1):
+                pt = lambda s, d: [round(A[0] + u[0] * s + w[0] * (T / 2 + d), 4), round(A[1] + u[1] * s + w[1] * (T / 2 + d), 4)]
+                return [pt(s0, d0), pt(s1, d0), pt(s1, d1), pt(s0, d1), pt(s0, d0)]
+            z0, zs, zh = o['base'], o['base'] + o['sill'], o['base'] + o['head']
+            parts = []
+            if o['kind'] == 'window':
+                parts = [('jambL', rect(0, FW, -FD / 2, FD / 2), zs, zh, 'frame'),
+                         ('jambR', rect(Lr - FW, Lr, -FD / 2, FD / 2), zs, zh, 'frame'),
+                         ('bottom', rect(FW, Lr - FW, -FD / 2, FD / 2), zs, zs + FW, 'frame'),
+                         ('top', rect(FW, Lr - FW, -FD / 2, FD / 2), zh - FW, zh, 'frame'),
+                         ('glass', rect(FW, Lr - FW, -0.01, 0.01), zs + FW, zh - FW, 'glass')]
+            else:
+                parts = [('jambL', rect(0, FW, -FD / 2, FD / 2), z0, zh, 'dframe'),
+                         ('jambR', rect(Lr - FW, Lr, -FD / 2, FD / 2), z0, zh, 'dframe'),
+                         ('top', rect(FW, Lr - FW, -FD / 2, FD / 2), zh - FW, zh, 'dframe'),
+                         ('leaf', rect(FW, Lr - FW, -0.02, 0.02), z0 + 0.01, zh - FW, 'door')]
+            for name, outline, b0, b1, m in parts:
+                if b1 - b0 <= 0.005:
+                    continue
+                mat = MAT[m]
+                elements.append({'id': f"{o['id']}.{name}", 'area': None, 'view': o['view'], 'kind': f"object:{o['kind']}",
+                                 'layer': mat[3], 'tag': mat[3], 'mat': mat[:3], 'base': round(b0, 4), 'top': round(b1, 4),
+                                 'outline': outline, 'holes': [],
+                                 'base_source': f"{o['kind']} {o['id']} ({L} m): sill {o['sill_source']}",
+                                 'height_source': f"head {o['head_source']}"})
+                objects += 1
+
     slabs = 0
     t = bans.get('slab_thickness_m')
     t_src = f'slab thickness {t} m (confirmed by the user)' if t else None
@@ -263,16 +314,17 @@ def main():
     for v in in_views:
         vv = views[v]
         es = [e for e in elements if e['view'] == v]
-        walls = [e for e in es if e['kind'] != 'slab' and not e['kind'].startswith('infill')] or es
+        walls = [e for e in es if e['kind'] != 'slab' and not e['kind'].startswith(('infill', 'object:'))] or es
         vinfo.append({'id': v, 'title': vv['titles'][0]['text'] if vv['titles'] else '', 'elements': len(es),
                       'base': min(e['base'] for e in walls), 'top': max(e['top'] for e in walls),   # the floor, not the slab
                       'slab_bottom': min(e['base'] for e in es), **offsets[v]})
     out = {'project': a.project, 'stacked': stack, 'views': vinfo, 'elements': elements, 'excluded': excluded,
            'counts': {'areas_found': len(ar['areas']), 'elements': len(elements), 'infill_pieces': infill, 'slabs': slabs,
+                      'window_door_parts': objects,
                       'excluded': len(excluded),
                       'excluded_by_reason': dict(collections.Counter(x['reason'] for x in excluded))}}
     json.dump(out, open(os.path.join(pdir, 'build.json'), 'w', encoding='utf-8'), ensure_ascii=False)
-    print(f"elements {len(elements)} (walls/objects {len(elements) - infill - slabs}, opening infill {infill}, slabs {slabs}) | "
+    print(f"elements {len(elements)} (walls/objects {len(elements) - infill - slabs - objects}, opening infill {infill}, window/door parts {objects}, slabs {slabs}) | "
           f"excluded {len(excluded)} {out['counts']['excluded_by_reason']} | stacked {stack}")
     for v in sorted(vinfo, key=lambda v: v['base']):
         print(f"  {v['id']:4} {v['base']:+6.2f}..{v['top']:+6.2f}  {v['elements']:4} el  {v['title'][:34]:34} | {v['note']}"

@@ -41,7 +41,9 @@ def main(project, verify=None):
            '- attic height 3.60 m runs to the roof level; the real attic walls end under the sloping roof (roof spec later)',
            f"- openings: {b['counts'].get('infill_pieces', 0)} sill/lintel pieces from typical heights confirmed for this project "
            f"(data/{project}/openings_answers.json); balcony doors to the floor are not told apart from windows yet",
-           f"- slabs: {b['counts'].get('slabs', 0)}, thickness from data/{project}/building_answers.json, top at each floor level; "
+           f"- window/door objects: {b['counts'].get('window_door_parts', 0)} parts (window = frame + glass, door = frame + "
+           'closed leaf, passages left open); simple generic shapes, not the real window types',
+           f"- slabs: {b['counts'].get('slabs', 0)}, thickness confirmed or measured in the sections, top at each floor level; "
            'walls still run floor-to-floor (they overlap the slab above by its thickness)']
     out = os.path.join(pdir, 'build_report.md')
     open(out, 'w', encoding='utf-8').write('\n'.join(md) + '\n')

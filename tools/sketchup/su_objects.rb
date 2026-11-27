@@ -18,7 +18,7 @@ module SuObjects
 
   def self.run(project)
     d = data(project)
-    layers = d['elements'].map { |e| e['layer'] }.uniq.sort
+    layers = d['elements'].reject { |e| e['mat'] }.map { |e| e['layer'] }.uniq.sort
     colour = layers.each_with_index.to_h { |l, i| [l, PALETTE[i % PALETTE.size]] }
     vtitle = d['views'].to_h { |v| [v['id'], v] }
     report = SuBuild.run(root_name(project)) do |b|
@@ -30,8 +30,10 @@ module SuObjects
           g.name = format('%s %s  %+.2f..%+.2f', v['id'], v['title'][0, 40], v['base'], v['top'])
           g
         end
+        # an element may carry its own tag and material (window frames, glass, door leaves); else one per layer
         g = b.extrude(vg.entities, e['outline'], e['base'], e['top'] - e['base'],
-                      tag: "DWG #{e['layer']}", mat: ["DWG #{e['layer']}", colour[e['layer']]],
+                      tag: e['tag'] || "DWG #{e['layer']}",
+                      mat: e['mat'] || ["DWG #{e['layer']}", colour[e['layer']]],
                       name: "#{e['id']} #{e['layer']}", holes: e['holes'])
         g ? b.count(:built) : b.count(:failed)
       end
