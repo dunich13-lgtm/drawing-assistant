@@ -30,23 +30,31 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Layer-name keywords (English, Bulgarian, German, common CAD standards). Order matters: first match wins.
 RULES = [
-    ('ignore', 'viewport / frame / title block', r'defpoints|vport|viewport|frame|border|рамк|щамп|title|titel|plankopf|sheet|лист'),
+    ('ignore', 'viewport / frame / title block / table', r'defpoints|vport|viewport|frame|border|рамк|щамп|антетк|таблиц|title|titel|plankopf|\bsheet\b|лист'),
     ('ignore', 'dimensions', r'dim|bem|размер|оразмер|maß'),
-    ('ignore', 'axes / grid', r'axis|axes|grid|^ос$|^оси|оси_|raster|achse'),
-    ('ignore', 'furniture / equipment', r'furn|обзав|mobel|möbel|equip|оборуд'),
-    ('level_marks', 'level marks', r'level|кот[аи]|kote|höhe|elev'),
-    ('annotation', 'text / annotation', r'text|txt|текст|надпис|anno|beschr|label|room.?name|помещ'),
+    ('ignore', 'axes / grid', r'axis|axes|grid|\bоси?\b|raster|achse'),
+    ('ignore', 'furniture / fixtures / landscape', r'furn|обзав|mobel|möbel|equip|оборуд|уреди|техник|санитар|осветл|lighting|растит|зелен|vegetat|улуц|gutter|кран|kran'),
+    ('ignore', 'demolition', r'демонт|demol|abbruch'),
+    ('ignore', 'construction details', r'^td\d|детайл|detail|fasten|gasket|flashing'),
+    ('ignore', 'insulation / plaster / finish layers', r'изолац|insul|dämm|\beps\b|_eps|eps_|\bxps\b|_xps|xps_|мин\.?\s*ват|min_?vata|baumit|мазил|mazil|замаз|toplo|poliuretan|plaster|putz'),
+    ('section_cut', 'section cut lines', r'линия\s*разрез|section.?line|cut.?line|schnittlinie'),
+    ('level_marks', 'level marks / floor levels', r'level|кот[аи]|котир|kote|höhe|elev\b|ниво'),
+    ('annotation', 'text / annotation', r'text|txt|[tт][xх][tт]|текст|надпис|anno|beschr|label|room.?name|помещ|специф'),
+    ('section_view', 'section / elevation linework', r'изглед|разрез|izgled|\braz\b|section|elevation|ansicht|schnitt|wl-sec|wl-vis|view'),
     ('opening', 'doors', r'door|врат|tür|tuer'),
-    ('opening', 'windows', r'window|win\b|прозор|fenster|дограм'),
-    ('object', 'walls / structure', r'wall|стен|wand|зид|beton|бетон|concrete|\brc\b|column|колон|stütz|slab|плоч|decke|struct|констр'),
+    ('opening', 'windows', r'window|win\b|прозор|fenster|дограм|dograma|glaz'),
+    ('object', 'walls / structure', r'wall|стен|wand|зид|beton|бетон|стоманобет|concrete|\brc\b|column|колон|stütz|slab|плоч|plocha|decke|struct|констр|tuhla|тухла'),
+    ('object', 'stairs / roof', r'стълб|stair|treppe|покрив|roof|dach'),
     ('object', 'objects / installation', r'object|обект|skulpt|скулпт|install|инстал|massing|volume|обем|building|сград'),
     # Last on purpose: a wall hatch ("A-WALL-HATCH") must stay an object; only other hatches are finishes/patterns.
     ('ignore', 'hatch for finishes / patterns', r'hatch|щрих|штрих|schraff|pattern|насти'),
 ]
 GEOM = {'LINE', 'LWPOLYLINE', 'POLYLINE', 'ARC', 'CIRCLE', 'ELLIPSE', 'SPLINE', 'HATCH'}
 TEXT = {'TEXT', 'MTEXT', 'ATTRIB', 'ATTDEF'}
-LEVEL_TEXT = re.compile(r'^\s*([±+\-]?\s*\d{1,3}[.,]\d{2,3})\s*$')
-ZERO_TEXT = re.compile(r'±\s*0[.,]00|^\s*[+\-]?0[.,]000?\s*$')
+# AutoCAD writes ± as the control code %%p (also %%P); level texts may carry a unit or a label after the number.
+PM = r'(?:±|%%[pP]|\+/-|\+-)'
+LEVEL_TEXT = re.compile(r'^\s*(' + PM + r'|[+\-])?\s*\d{1,3}[.,]\d{2,3}\s*(m|м)?\s*$')
+ZERO_TEXT = re.compile(PM + r'\s*0[.,]00|^\s*[+\-]?\s*0[.,]000?\s*(m|м)?\s*$')
 HEIGHT_LABEL = re.compile(r'^\s*[Hh]\s*=\s*\d')
 VIEW_TITLE = re.compile(r'разрез|сечение|фасада|section|elevation|schnitt|ansicht', re.I)
 TITLE_BLOCK = re.compile(r'title|щамп|рамк|frame|border|plankopf|^a[0-4]\b', re.I)
@@ -54,14 +62,17 @@ TITLE_BLOCK = re.compile(r'title|щамп|рамк|frame|border|plankopf|^a[0-4]
 
 def classify(layer, types):
     name = layer.lower()
-    for role, why, pat in RULES:
-        if re.search(pat, name):
-            return role, f"name matches '{why}'", 'medium'
     kinds = set(types)
+    # What is actually on the layer beats its name ("183-ТХТ дограма" holds only texts: annotation, not windows).
     if kinds and kinds <= {'DIMENSION'}:
         return 'ignore', 'only dimensions on this layer', 'high'
     if kinds and kinds <= TEXT:
         return 'annotation', 'only texts on this layer', 'high'
+    if kinds and kinds <= {'POINT'}:
+        return 'ignore', 'only points on this layer', 'high'
+    for role, why, pat in RULES:
+        if re.search(pat, name):
+            return role, f"name matches '{why}'", 'medium'
     if kinds and kinds <= {'INSERT'}:
         return 'unknown', 'only block inserts (could be doors/windows, furniture, symbols)', 'low'
     if kinds & GEOM:
@@ -135,6 +146,8 @@ def propose(project):
                           'opening': 'door/window blocks or geometry (building profile)',
                           'annotation': 'texts used as labels (H=...), room names - not built',
                           'level_marks': 'level marks used for heights - not built',
+                          'section_cut': 'section cut lines (A-A) linking plans to sections - not built',
+                          'section_view': 'linework of sections / elevations, read for heights - not built',
                           'ignore': 'never built', 'unknown': 'ASK THE USER before building'}}
 
     questions = []
@@ -163,7 +176,7 @@ def propose(project):
           f"level marks: {len(levels)} · height labels (H=...): {len(height_labels)} · "
           f"section/elevation titles: {len(views)}", '',
           '## Layers by proposed role']
-    for role in ('object', 'opening', 'annotation', 'level_marks', 'unknown', 'ignore'):
+    for role in ('object', 'opening', 'annotation', 'level_marks', 'section_cut', 'section_view', 'unknown', 'ignore'):
         if by_role[role]:
             md += [f'### {role} ({len(by_role[role])})', *[f'- {s}' for s in by_role[role]], '']
     md += ['## Questions for you', *[f'{i}. {q}' for i, q in enumerate(questions, 1)]]

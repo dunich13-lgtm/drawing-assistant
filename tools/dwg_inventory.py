@@ -52,6 +52,7 @@ def load(path):
 
 def clean(t):
     """Strip MTEXT formatting codes (\\P new paragraph, \\f font, {...})."""
+    t = re.sub(re.escape(BS) + r'[LlOoKk]', '', t)                      # underline / overline / strike on-off
     t = re.sub(re.escape(BS) + r'[A-Za-z][^;' + re.escape(BS) + r']*;', '', t)
     return t.replace(BS + 'P', ' / ').replace('{', '').replace('}', '').strip()
 

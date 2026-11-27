@@ -13,7 +13,7 @@ if ($docs.Count -eq 0) { throw "No open drawing matches $($DocNames -join ', ').
 try {
     foreach ($d in $docs) {
         $acad.ActiveDocument = $d
-        $safe = [IO.Path]::GetFileNameWithoutExtension($d.Name) -replace '[^A-Za-z0-9_\-]', '_'
+        $safe = [IO.Path]::GetFileNameWithoutExtension($d.Name) -replace '[^\w\-]', '_'
         $exact = [Management.Automation.WildcardPattern]::Escape($d.Name)
         & (Join-Path $PSScriptRoot 'acad_run_lisp.ps1') -Lisp dwg_inventory.lsp -Call '(di-dump "{OUT}")' `
             -Out "$safeProject\inventory\$safe.tsv" -DocName $exact -TimeoutSec $TimeoutSec
