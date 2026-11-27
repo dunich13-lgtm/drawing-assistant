@@ -39,7 +39,10 @@ def main(project, verify=None):
            '## Assumptions to confirm',
            *[f"- {v['id']} ({v['title']}): placed by footprint overlap — check it sits right on the floor below" for v in b['views'] if v.get('check')],
            '- attic height 3.60 m runs to the roof level; the real attic walls end under the sloping roof (roof spec later)',
-           '- door/window openings are still open gaps in the walls; slabs not built yet (NIN-11)']
+           f"- openings: {b['counts'].get('infill_pieces', 0)} sill/lintel pieces from typical heights confirmed for this project "
+           f"(data/{project}/openings_answers.json); balcony doors to the floor are not told apart from windows yet",
+           f"- slabs: {b['counts'].get('slabs', 0)}, thickness from data/{project}/building_answers.json, top at each floor level; "
+           'walls still run floor-to-floor (they overlap the slab above by its thickness)']
     out = os.path.join(pdir, 'build_report.md')
     open(out, 'w', encoding='utf-8').write('\n'.join(md) + '\n')
     print('\n'.join(md))

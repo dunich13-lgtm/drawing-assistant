@@ -67,7 +67,11 @@ holes, outline in metres; report: gaps joined, gaps too big (5–50 mm, ask), da
 ```powershell
 python tools\heights.py <name>                                # resolve + questions (labels, rules, proposals)
 python tools\heights.py <name> --accept V15,V12 --skip V1     # only after the user said yes
+python tools\sections.py <name> [--plot S4]                   # level scales from sections/facades = height source 2 (NIN-9)
 python tools\build_data.py <name>                             # build.json; stacks floors (shapes, else footprint = PLEASE CHECK)
+python tools\openings.py <name> [--plot V15]                  # openings = facing wall ends; door/window/passage from blocks (NIN-11)
+python tools\openings.py <name> --set window.sill=0.9 --set window.head=2.13 --set door.sill=0 --set door.head=2.13 --set passage.sill=0 --set passage.head=2.13
+python tools\build_data.py <name> --confirm-placement V16,V3 --slab 0.2   # + sill/lintel infill + slabs (values the user confirmed)
 & tools\sketchup\su_query.ps1 -Code "SuBridge.use('su_objects'); SuObjects.run('<name>')" -TimeoutSec 900
 & tools\sketchup\su_query.ps1 -Code "SuObjects.verify('<name>')"     # every element vs its outline/levels (must be <= 1 cm)
 python tools\build_report.py <name> "<verify line>"           # data\<name>\build_report.md

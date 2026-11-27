@@ -98,6 +98,8 @@ def main():
     ap.add_argument('project')
     ap.add_argument('--no-stack', action='store_true')
     ap.add_argument('--min-match', type=float, default=0.3, help='share of a view\'s explicit shapes that must match to move it')
+    ap.add_argument('--confirm-placement', help='view ids whose footprint placement the user confirmed, e.g. V16,V3')
+    ap.add_argument('--slab', type=float, help='slab thickness in metres (confirmed by the user)')
     a = ap.parse_args()
     pdir = os.path.join(ROOT, 'data', a.project)
     pj = json.load(open(os.path.join(pdir, 'project.json'), encoding='utf-8'))
@@ -155,6 +157,60 @@ def main():
                 e['outline'] = [sh(p) for p in e['outline']]
                 e['holes'] = [[sh(p) for p in h] for h in e['holes']]
 
+    # ---- building profile additions (NIN-11): placement confirmation, opening infill, slabs --------------------
+    bpath = os.path.join(pdir, 'building_answers.json')
+    bans = json.load(open(bpath, encoding='utf-8')) if os.path.exists(bpath) else {}
+    if a.confirm_placement:
+        bans['placement_confirmed'] = sorted(set(bans.get('placement_confirmed', [])) | set(a.confirm_placement.split(',')))
+    if a.slab is not None:
+        bans['slab_thickness_m'] = a.slab
+    if a.confirm_placement or a.slab is not None:
+        json.dump(bans, open(bpath, 'w', encoding='utf-8'), indent=1)
+    for v in bans.get('placement_confirmed', []):
+        if v in offsets and offsets[v].get('check'):
+            offsets[v]['check'] = False
+            offsets[v]['note'] = offsets[v]['note'].replace(' - PLEASE CHECK', '') + '; placement confirmed by the user'
+
+    infill = 0
+    opath = os.path.join(pdir, 'openings.json')
+    if pj.get('profile') == 'building' and os.path.exists(opath):
+        for o in json.load(open(opath, encoding='utf-8'))['openings']:
+            if o['sill'] is None or o['head'] is None or o['view'] not in offsets:
+                continue
+            pieces = []
+            if o['sill'] > 0.001:
+                pieces.append(('sill', o['base'], o['base'] + o['sill'], o['sill_source']))
+            if o['base'] + o['head'] < o['top'] - 0.001:
+                pieces.append(('lintel', o['base'] + o['head'], o['top'], o['head_source']))
+            for name, z0, z1, src in pieces:
+                elements.append({'id': f"{o['id']}.{name}", 'area': None, 'view': o['view'], 'kind': f'infill:{o["kind"]}',
+                                 'layer': o['wall_layer'], 'base': round(z0, 4), 'top': round(z1, 4),
+                                 'outline': o['outline'], 'holes': [],
+                                 'base_source': f"{o['kind']} {o['id']} ({o['length_m']} m): {src}",
+                                 'height_source': f"wall top of {o['view']}"})
+                infill += 1
+
+    slabs = 0
+    t = bans.get('slab_thickness_m')
+    if pj.get('profile') == 'building' and t:
+        from shapely.geometry import Polygon
+        from shapely.ops import unary_union
+        for v in in_views:
+            parts = [Polygon(e['outline'], e['holes']).buffer(0) for e in elements if e['view'] == v]
+            if not parts:
+                continue
+            base = min(e['base'] for e in elements if e['view'] == v and not e['kind'].startswith('infill'))
+            shape = unary_union(parts).buffer(0.05, join_style='mitre').buffer(-0.05, join_style='mitre')
+            for i, p in enumerate(shape.geoms if hasattr(shape, 'geoms') else [shape]):
+                if p.area < 4.0:
+                    continue
+                elements.append({'id': f'{v}.slab{i + 1}', 'area': None, 'view': v, 'kind': 'slab', 'layer': 'DWG slab',
+                                 'base': round(base - t, 4), 'top': base,
+                                 'outline': [[round(x, 4), round(y, 4)] for x, y in p.exterior.coords], 'holes': [],
+                                 'base_source': f'slab thickness {t} m (confirmed by the user) under the floor level',
+                                 'height_source': f'outer outline of the walls and openings of {v}; top = floor level {base:+.2f}'})
+                slabs += 1
+
     vinfo = []
     for v in in_views:
         vv = views[v]
@@ -162,10 +218,12 @@ def main():
         vinfo.append({'id': v, 'title': vv['titles'][0]['text'] if vv['titles'] else '', 'elements': len(es),
                       'base': min(e['base'] for e in es), 'top': max(e['top'] for e in es), **offsets[v]})
     out = {'project': a.project, 'stacked': stack, 'views': vinfo, 'elements': elements, 'excluded': excluded,
-           'counts': {'areas_found': len(ar['areas']), 'elements': len(elements), 'excluded': len(excluded),
+           'counts': {'areas_found': len(ar['areas']), 'elements': len(elements), 'infill_pieces': infill, 'slabs': slabs,
+                      'excluded': len(excluded),
                       'excluded_by_reason': dict(collections.Counter(x['reason'] for x in excluded))}}
     json.dump(out, open(os.path.join(pdir, 'build.json'), 'w', encoding='utf-8'), ensure_ascii=False)
-    print(f"elements {len(elements)} | excluded {len(excluded)} {out['counts']['excluded_by_reason']} | stacked {stack}")
+    print(f"elements {len(elements)} (walls/objects {len(elements) - infill - slabs}, opening infill {infill}, slabs {slabs}) | "
+          f"excluded {len(excluded)} {out['counts']['excluded_by_reason']} | stacked {stack}")
     for v in sorted(vinfo, key=lambda v: v['base']):
         print(f"  {v['id']:4} {v['base']:+6.2f}..{v['top']:+6.2f}  {v['elements']:4} el  {v['title'][:34]:34} | {v['note']}"
               + (f" (dx {v['dx']:.3f}, dy {v['dy']:.3f})" if v['moved'] else ''))

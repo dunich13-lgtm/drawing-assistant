@@ -56,6 +56,9 @@ one way of drawing**: a wall can be 4 loose lines, a hatched rectangle, or open/
 - [ ] **Openings are not full-height slots** (user, 2026-11-27): wall infill below each window (to the sill) and above every
       door/window (from the head to the top of the wall); sill/head heights from the **sections and facades** first,
       then block attributes / schedule, else ask.
+      **Window schedules usually do NOT come with the drawings** (user, 2026-11-27): never depend on one. Order of
+      sources for sill/head: notes in the plans (`пп=90`, block attributes) → sections/facades that really draw the
+      openings → typical heights per project, confirmed by the user once → ask. A schedule is used only if present.
 - [x] Floors stacked (done in NIN-10: shape match, footprint fallback marked "please check").
 
 ### R6 — Verify and report
