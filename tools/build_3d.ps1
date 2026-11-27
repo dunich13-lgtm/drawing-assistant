@@ -66,6 +66,9 @@ if ($profile -eq 'building') {
     if ([int]$hasStairs -gt 0) {
         Step '7b stairs'
         if ($Refresh -or -not (Test-Path (Join-Path $data 'geometry_stairs.tsv'))) { & (Join-Path $root 'tools\acad\acad_geo_dump.ps1') -Project $Project -Roles stairs }
+        # stair blocks (walk-line symbols, whole stairs): dump the definitions that are not dumped yet
+        $need = & $py -c "import sys,os; sys.path.insert(0,r'$root\tools'); import geom, blocks; e=geom.load(sys.argv[1]); print(','.join(sorted({x['name'] for x in e if x['type']=='INSERT' and not os.path.exists(blocks.block_path(sys.argv[2], x['name']))})))" (Join-Path $data 'geometry_stairs.tsv') $Project
+        if ($need) { & (Join-Path $root 'tools\acad\acad_dump_block_defs.ps1') -Project $Project -Names ($need -split ',') }
         Run @($py, (Join-Path $root 'tools\stairs.py'), $Project)
     }
     $slab = Json 'building_answers.json' "d.get('slab_thickness_m')"
