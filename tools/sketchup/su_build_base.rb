@@ -30,19 +30,42 @@ module SuBuild
 
     # Closed 2D outline (list of [x, y], last point may repeat the first) extruded from z0 by height,
     # as its own group inside `ents`. Returns the group, or nil (and a note) if the outline is invalid.
-    def extrude(ents, outline, z0, height, tag: nil, mat: nil, name: nil)
-      pts = outline.dup
-      pts.pop if pts.size > 1 && pts.first == pts.last
+    def extrude(ents, outline, z0, height, tag: nil, mat: nil, name: nil, holes: [])
+      pts = clean(outline)
       return note("skipped outline with #{pts.size} points#{name ? " (#{name})" : ''}") if pts.size < 3
+      return note("skipped #{name}: height #{height} <= 0") if height.to_f <= 0
       g = ents.add_group
       g.name = name if name
-      f = g.entities.add_face(pts.map { |p| pt(p, z0) })
+      f = begin
+        g.entities.add_face(pts.map { |p| pt(p, z0) })
+      rescue ArgumentError => e
+        nil
+      end
       return (g.erase!; note("could not make a face#{name ? " for #{name}" : ''}")) unless f
+      (holes || []).each do |h|
+        hp = clean(h)
+        next if hp.size < 3
+        begin
+          hf = g.entities.add_face(hp.map { |p| pt(p, z0) })
+          hf.erase! if hf && hf.valid?
+        rescue ArgumentError
+          note("hole skipped in #{name}")
+        end
+      end
+      f = g.entities.grep(Sketchup::Face).max_by(&:area)        # the outer face (holes may have split it)
       f.reverse! if f.normal.z < 0
       f.pushpull(height.to_f.m)
       g.layer = self.tag(tag) if tag
       g.material = self.material(*mat) if mat
       g
+    end
+
+    # drop the closing point and consecutive duplicates (SketchUp rejects zero-length edges)
+    def clean(path)
+      pts = []
+      path.each { |p| pts << p unless pts.last && (pts.last[0] - p[0]).abs < 1e-6 && (pts.last[1] - p[1]).abs < 1e-6 }
+      pts.pop if pts.size > 1 && (pts.first[0] - pts.last[0]).abs < 1e-6 && (pts.first[1] - pts.last[1]).abs < 1e-6
+      pts
     end
 
     def count(key, n = 1) @counts[key] += n end

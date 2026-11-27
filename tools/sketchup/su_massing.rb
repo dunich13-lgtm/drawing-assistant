@@ -2,7 +2,7 @@
 # 2D outline extruded from z = 0 to its labelled height. Re-runnable: rebuilds the 'DWG massing' group.
 #   SuBridge.use('su_massing'); SuMassing.run            (or SuMassing.run('data/other.json'))
 require 'json'
-SuBridge.use('su_build_base') unless defined?(SuBuild)
+SuBridge.use('su_build_base')   # always reload: an older version may still be loaded in this SketchUp session
 
 module SuMassing
   COLORS = [[214, 196, 168], [168, 190, 214], [190, 214, 168], [214, 168, 190], [200, 200, 200]]

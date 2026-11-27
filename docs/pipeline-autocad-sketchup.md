@@ -63,6 +63,16 @@ python tests\test_areas.py                                    # acceptance check
 (explicit = drawn closed; cell = closed by loose linework) with view, layers, parent, area, perimeter, mean width,
 holes, outline in metres; report: gaps joined, gaps too big (5–50 mm, ask), dangling ends, overlapping lines.
 
+**Heights (NIN-8) and build (NIN-10):**
+```powershell
+python tools\heights.py <name>                                # resolve + questions (labels, rules, proposals)
+python tools\heights.py <name> --accept V15,V12 --skip V1     # only after the user said yes
+python tools\build_data.py <name>                             # build.json; stacks floors (shapes, else footprint = PLEASE CHECK)
+& tools\sketchup\su_query.ps1 -Code "SuBridge.use('su_objects'); SuObjects.run('<name>')" -TimeoutSec 900
+& tools\sketchup\su_query.ps1 -Code "SuObjects.verify('<name>')"     # every element vs its outline/levels (must be <= 1 cm)
+python tools\build_report.py <name> "<verify line>"           # data\<name>\build_report.md
+```
+
 **First look at an unknown drawing (manual):**
 ```powershell
 & tools\acad\acad_run_lisp.ps1 -Lisp dwg_inventory.lsp -Call '(di-dump "{OUT}")' -Out dwg_inventory.tsv
