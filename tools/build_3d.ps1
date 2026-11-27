@@ -90,6 +90,6 @@ $tgt = "[$(& $f $cx), $(& $f $cy), $(& $f ($b[4] / 3))]"
 & (Join-Path $root 'tools\sketchup\su_query.ps1') -Code "SuBridge.use('su_shots'); Shots.perspective('${Project}_overview', $eye, $tgt, 45, 1600, 1000)" -TimeoutSec 300
 
 Step '11 report'
-& $py (Join-Path $root 'tools\build_report.py') $Project "verify: $vline" | Select-Object -First 3; if ($LASTEXITCODE -ne 0) { throw 'report failed' }
+$rep = & $py (Join-Path $root 'tools\build_report.py') $Project "verify: $vline"; $rc = $LASTEXITCODE; $rep | Select-Object -First 3; if ($rc -ne 0) { throw 'report failed' }   # collect first: cutting the pipe breaks python's output
 Write-Output ''
 Write-Output "DONE - model built in SketchUp (not saved). Report: data\$Project\build_report.md  Render: views\${Project}_overview.png"

@@ -76,9 +76,12 @@ def read_labels(project, k):
     return labels
 
 
-def section_levels(sections, plan_level):
+def section_levels(sections, plan_level, plan_levels=()):
     """Source 2: a section/facade level scale that has a mark at this plan's level (±1 cm).
-    -> (base, base_source, height, height_source) or None. Prefers a titled section (РАЗРЕЗ) over facades."""
+    Sections also mark non-floor levels (window heads, beams, parapets), so the height does NOT run to the next mark:
+      - to the next PLAN level when there is one (the section confirms it when it marks it too);
+      - for the top floor: to the highest section mark within 6 m (roof / parapet edge), flagged 'please check'.
+    -> (base, height) as (value, source) pairs, height may be None. Prefers a titled section (РАЗРЕЗ) over facades."""
     hits = [s for s in sections if any(abs(m - plan_level) <= 0.01 for m in s['levels'])]
     if not hits:
         return None
@@ -87,10 +90,19 @@ def section_levels(sections, plan_level):
     s = hits[0]
     more = f' (+{len(hits) - 1} more level scales agree)' if len(hits) > 1 else ''
     base = (plan_level, f"section '{s['title']}' ({s['id']}): mark {plan_level:+.2f}{more}")
-    above = [m for m in s['levels'] if m > plan_level + 0.01]
-    height = (round(min(above) - plan_level, 4),
-              f"section '{s['title']}' ({s['id']}): marks {plan_level:+.2f} -> {min(above):+.2f}{more}") if above else None
-    return base, height
+    nxt = [l for l in plan_levels if l > plan_level + 0.01]
+    if nxt:
+        top = min(nxt)
+        marked = [x for x in hits if any(abs(m - top) <= 0.01 for m in x['levels'])]
+        src = (f"section '{marked[0]['title']}' ({marked[0]['id']}): marks {plan_level:+.2f} -> {top:+.2f} (next plan level)"
+               if marked else f"next plan level {top:+.2f} (not marked in the section)")
+        return base, (round(top - plan_level, 4), src)
+    above = [(m, x) for x in hits for m in x['levels'] if plan_level + 0.01 < m <= plan_level + 6.0]
+    if not above:
+        return base, None
+    m, x = max(above, key=lambda t: t[0])
+    return base, (round(m - plan_level, 4),
+                  f"section '{x['title']}' ({x['id']}): top floor up to its highest mark {m:+.2f} (roof/parapet edge) - PLEASE CHECK")
 
 
 def resolve(areas, views, labels, layermap, answers, profile, sections=None):
@@ -141,7 +153,7 @@ def resolve(areas, views, labels, layermap, answers, profile, sections=None):
             src = f"label '{lb['text']}' (layer {lb['layer']}, handle {lb['handle']})" + ('' if lb['unit_given'] else ', unit assumed m')
             cand[lb['kind']].append((1, lb['value'], src))
         if sections and a['view'] in vlevel:
-            sec = section_levels(sections, vlevel[a['view']][0])
+            sec = section_levels(sections, vlevel[a['view']][0], levels)
             if sec:
                 cand['base'].append((2, sec[0][0], sec[0][1]))
                 if sec[1]:

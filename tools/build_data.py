@@ -80,6 +80,17 @@ def footprint_fallback(elements, offsets, ref, failed, min_score):
         cands['right/top edges'] = (rb[2] - b[2], rb[3] - b[3])
         cands['left/top edges'] = (rb[0] - b[0], rb[3] - b[3])
         cands['centres'] = ((rb[0] + rb[2] - b[0] - b[2]) / 2, (rb[1] + rb[3] - b[1] - b[3]) / 2)
+        # wall-corner voting: works when only PART of the outline is shared (a bigger basement, a smaller attic)
+        def corners(g):
+            pts = []
+            for p in (g.geoms if hasattr(g, 'geoms') else [g]):
+                pts += list(p.simplify(0.01).exterior.coords)[:-1]
+            return pts
+        rc, vc = corners(ref_f.buffer(-0.05)), corners(f)
+        if rc and vc and len(rc) * len(vc) <= 4_000_000:
+            votes = collections.Counter((round((x1 - x0) / 0.02), round((y1 - y0) / 0.02)) for x1, y1 in rc for x0, y0 in vc)
+            for rank, ((gx, gy), n) in enumerate(votes.most_common(5)):
+                cands[f'wall corners #{rank + 1} ({n} corners)'] = (gx * 0.02, gy * 0.02)
         from shapely.affinity import translate
         scored = sorted(((translate(f, dx, dy).intersection(ref_f).area / f.area, name, (dx, dy))
                          for name, (dx, dy) in cands.items()), reverse=True)
@@ -119,6 +130,11 @@ def main():
         if h['status'] != 'resolved':
             excluded.append({'id': ar_['id'], 'view': ar_['view'], 'reason': 'height or base not resolved'})
             continue
+        if pj.get('profile') == 'building' and (ar_.get('mean_width_m') or 0) > 1.0:
+            # a wall is never > 1 m thick on average: this is a room / building outline drawn on a wall layer
+            excluded.append({'id': ar_['id'], 'view': ar_['view'],
+                             'reason': 'too wide for a wall (room or outline drawn on a wall layer)'})
+            continue
         for k, part in enumerate(ar_['shape']):
             elements.append({'id': ar_['id'] + (f'.{k + 1}' if len(ar_['shape']) > 1 else ''), 'area': ar_['id'],
                              'view': ar_['view'], 'kind': ar_['kind'], 'layer': (ar_['layers'] or ['?'])[0],
@@ -150,6 +166,10 @@ def main():
                 failed.append((v, m, n, share))
         if failed:
             footprint_fallback(elements, offsets, ref, failed, a.min_match)
+            # second pass: a view placed in the first pass may reveal the sheet step for the ones still unplaced
+            still = [f for f in failed if not offsets[f[0]]['moved']]
+            if still and len(still) < len(failed):
+                footprint_fallback(elements, offsets, ref, still, a.min_match)
         for e in elements:
             o = offsets[e['view']]
             if o['moved']:
@@ -166,6 +186,29 @@ def main():
         bans['slab_thickness_m'] = a.slab
     if a.confirm_placement or a.slab is not None:
         json.dump(bans, open(bpath, 'w', encoding='utf-8'), indent=1)
+    # placement the drawing can't tell: the user clicked the same building corner in the reference plan (p1) and in
+    # this view (p2) with tools/acad/acad_pick.ps1 -Label align_<view>  ->  offset = p1 - p2
+    k = pj['units_to_m']
+    for v in in_views:
+        pick = os.path.join(pdir, f'acad_pick_align_{v}.json')
+        if os.path.exists(pick) and stack:
+            pk = json.load(open(pick, encoding='utf-8'))
+            inside = lambda p, vid: (lambda b: b[0] - 0.5 <= p[0] * k <= b[2] + 0.5 and b[1] - 0.5 <= p[1] * k <= b[3] + 0.5)(views[vid]['bbox_m'])
+            if not (inside(pk['p1'], ref) and inside(pk['p2'], v)):
+                print(f"WARNING {os.path.basename(pick)} ignored: click 1 must be in the reference plan {ref} and click 2 in "
+                      f"{v} ({views[v]['titles'][0]['text'][:40] if views[v]['titles'] else v}); got "
+                      f"{'ok' if inside(pk['p1'], ref) else 'outside'} / {'ok' if inside(pk['p2'], v) else 'outside'}")
+                continue
+            dx, dy = (pk['p1'][0] - pk['p2'][0]) * k, (pk['p1'][1] - pk['p2'][1]) * k
+            old = offsets[v]
+            for e in elements:                         # undo an automatic move first, then apply the user's
+                if e['view'] == v:
+                    sh = lambda p: [round(p[0] - (old['dx'] if old['moved'] else 0) + dx, 4),
+                                    round(p[1] - (old['dy'] if old['moved'] else 0) + dy, 4)]
+                    e['outline'] = [sh(p) for p in e['outline']]
+                    e['holes'] = [[sh(p) for p in h] for h in e['holes']]
+            offsets[v] = {'dx': round(dx, 4), 'dy': round(dy, 4), 'moved': True, 'check': False,
+                          'note': f'aligned by the user: same corner clicked in both plans ({os.path.basename(pick)})'}
     for v in bans.get('placement_confirmed', []):
         if v in offsets and offsets[v].get('check'):
             offsets[v]['check'] = False
@@ -220,8 +263,10 @@ def main():
     for v in in_views:
         vv = views[v]
         es = [e for e in elements if e['view'] == v]
+        walls = [e for e in es if e['kind'] != 'slab' and not e['kind'].startswith('infill')] or es
         vinfo.append({'id': v, 'title': vv['titles'][0]['text'] if vv['titles'] else '', 'elements': len(es),
-                      'base': min(e['base'] for e in es), 'top': max(e['top'] for e in es), **offsets[v]})
+                      'base': min(e['base'] for e in walls), 'top': max(e['top'] for e in walls),   # the floor, not the slab
+                      'slab_bottom': min(e['base'] for e in es), **offsets[v]})
     out = {'project': a.project, 'stacked': stack, 'views': vinfo, 'elements': elements, 'excluded': excluded,
            'counts': {'areas_found': len(ar['areas']), 'elements': len(elements), 'infill_pieces': infill, 'slabs': slabs,
                       'excluded': len(excluded),

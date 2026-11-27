@@ -38,12 +38,15 @@ pviews = [{'id': 'V1', 'kind': 'plan', 'titles': [{'text': 'План етаж 1 
 areas = [sq('A1', 'V1', 0), sq('A2', 'V1', 10), sq('A3', 'V2', 100), sq('A4', 'V3', 200)]
 labels = [{'kind': 'height', 'value': 3.1, 'unit_given': True, 'text': 'H=3.10m', 'at': (12, 2), 'layer': 'T', 'handle': 'h1'}]
 secs = [{'id': 'S1', 'title': 'Фасада Север', 'levels': [0.0, 2.8, 5.6]},
-        {'id': 'S2', 'title': 'РАЗРЕЗ А-А', 'levels': [0.0, 2.8, 5.6]}]
+        {'id': 'S2', 'title': 'РАЗРЕЗ А-А', 'levels': [0.0, 2.8, 4.19, 5.6]}]     # +4.19 = a window head, not a floor (Harmanli)
 res, qs, conf, _ = H.resolve(areas, pviews, labels, {}, {'accepted_views': [], 'set': {}, 'auto_drawing_values': False}, 'building', secs)
 check('A1: base and height from the section, no proposal acceptance needed', res['A1']['status'] == 'resolved'
       and res['A1']['height'] == 2.8 and res['A1']['height_source'].startswith("section 'РАЗРЕЗ А-А'"), res['A1']['height_source'])
 check('the section (РАЗРЕЗ) is preferred over a facade, and agreement is noted', '(+1 more level scales agree)' in res['A1']['base_source'])
-check('A3: +2.80 -> next mark +5.60 = 2.80', res['A3']['base'] == 2.8 and res['A3']['height'] == 2.8)
+check('A3 (top floor): runs to the highest mark +5.60, NOT to the non-floor mark +4.19', res['A3']['base'] == 2.8
+      and res['A3']['height'] == 2.8 and 'PLEASE CHECK' in res['A3']['height_source'], res['A3']['height_source'])
+check('A1: height runs to the next PLAN level +2.80 (confirmed by the section)', res['A1']['height'] == 2.8
+      and 'next plan level' in res['A1']['height_source'])
 check('A2: the label (3.10) wins over the section (2.80)', res['A2']['height'] == 3.1 and res['A2']['height_source'].startswith('label'))
 check('A2: label/section disagreement is flagged', any(c['area'] == 'A2' and c['what'] == 'height'
       and any(o['source'].startswith('section') for o in c['other']) for c in conf))
