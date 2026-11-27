@@ -25,11 +25,35 @@ $src = [IO.File]::ReadAllLines($lspPath, [Text.Encoding]::UTF8)
 $code = ($src | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith(';') } | ForEach-Object { $_.Trim() }) -join ' '
 if ($code.Contains("`t")) { throw "$Lisp contains a literal tab; use \t inside strings instead." }
 
+# Split into top-level forms (one defun each). AutoCAD truncates a command-line input of about 2000+
+# characters, which leaves it waiting at a "((_>" prompt, so every form is sent on its own.
+$MaxForm = 1800
+$forms = New-Object System.Collections.Generic.List[string]
+$depth = 0; $inStr = $false; $start = -1
+for ($i = 0; $i -lt $code.Length; $i++) {
+    $ch = $code[$i]
+    if ($inStr) {
+        if ($ch -eq '\') { $i++ } elseif ($ch -eq '"') { $inStr = $false }
+        continue
+    }
+    if ($ch -eq '"') { $inStr = $true }
+    elseif ($ch -eq '(') { if ($depth -eq 0) { $start = $i }; $depth++ }
+    elseif ($ch -eq ')') {
+        $depth--
+        if ($depth -lt 0) { throw "$Lisp has an extra ')' near character $i." }
+        if ($depth -eq 0) { $forms.Add($code.Substring($start, $i - $start + 1)) }
+    }
+}
+if ($depth -ne 0 -or $inStr) { throw "$Lisp has unbalanced parentheses or an open string." }
+foreach ($f in $forms) { if ($f.Length -gt $MaxForm) { throw "A form in $Lisp is $($f.Length) chars (max $MaxForm). Split it into smaller defuns: $($f.Substring(0, 60))..." } }
+
 $outPath = Get-DataPath $Out
 if (Test-Path $outPath) { Remove-Item $outPath -Force }
 $lispOut = ($outPath -replace '\\', '/') -replace '"', ''
-$expr = $Call.Replace('{OUT}', $lispOut)
-$doc.SendCommand("(progn $code $expr (princ))`n")
+$expr = "(progn $($Call.Replace('{OUT}', $lispOut)) (princ))"
+if ($expr.Length -gt $MaxForm) { throw 'The -Call expression is too long.' }
+foreach ($f in $forms) { $doc.SendCommand("$f`n") }
+$doc.SendCommand("$expr`n")
 
 # Wait until the tool wrote its final #DONE line (AutoCAD runs the command asynchronously).
 $deadline = (Get-Date).AddSeconds($TimeoutSec)

@@ -19,7 +19,7 @@ if (-not $Code) { throw 'Pass -Code or -File.' }
 
 # Number queries upward: the highest number in the outbox is the last one used.
 $nums = @(Get-ChildItem $outbox -Filter 'q*.out' -ErrorAction SilentlyContinue | ForEach-Object { if ($_.BaseName -match '^q(\d+)$') { [int]$matches[1] } })
-$n = 1 + ($nums | Measure-Object -Maximum).Maximum
+$n = 1 + [int](($nums | Measure-Object -Maximum).Maximum)   # Measure-Object returns a double
 $name = 'q{0:D4}' -f $n
 $enc = New-Object Text.UTF8Encoding $false
 $tmp = Join-Path $inbox "$name.tmp"
