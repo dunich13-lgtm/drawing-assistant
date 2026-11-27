@@ -190,8 +190,13 @@ def find_views(areas, texts, gap, title_dist):
         d, v = min(((vw['geom'].distance(p), vw) for vw in views), key=lambda x: x[0])
         if d <= title_dist:
             v['titles'].append({'text': t['text'], 'distance': round(d, 3)})
+    level_rx = re.compile(r'(?:кота|kote|level|ниво)\s*(?:±|%%[pP]|[+\-])?\s*(\d+[.,]\d{1,3})', re.I)
     for v in views:
         v['titles'].sort(key=lambda t: t['distance'])
+        lv = {m.group(0) for t in v['titles'] if re.search(r'план|plan', t['text'], re.I)
+              for m in [level_rx.search(t['text'])] if m}
+        v['warning'] = (f'probably several plans merged (titles with levels {sorted(lv)}): use a smaller --view-gap'
+                        if len(lv) > 1 else None)
         v['kind'] = 'unknown'
         for t in v['titles']:
             for kind, pat in VIEW_KIND:
@@ -239,7 +244,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('project')
     ap.add_argument('--geometry')
-    ap.add_argument('--view-gap', type=float, default=1.0, help='metres of empty space that separates two views')
+    ap.add_argument('--view-gap', type=float, default=5.0,
+                    help='metres of empty space that separates two views (5 m: sparse plans stay whole, '
+                         'plans ~20 m apart stay separate; tested on Venelin R4)')
     ap.add_argument('--title-dist', type=float, default=15.0, help='max metres from a view to its title')
     ap.add_argument('--plot', action='store_true', help='also write views/<project>/areas_overview.png')
     ap.add_argument('--plot-view', help='plot only this view id (e.g. V24), with area ids and gaps')
@@ -268,7 +275,10 @@ def main():
                           'shape': to_m(g, k)})
     counts = collections.Counter(owner)
     out_views = [{'id': v['id'], 'kind': v['kind'], 'titles': v['titles'][:3], 'areas': counts[v['id']],
-                  'bbox_m': [round(c * k, 3) for c in v['geom'].bounds]} for v in views]
+                  'warning': v['warning'], 'bbox_m': [round(c * k, 3) for c in v['geom'].bounds]} for v in views]
+    for v in out_views:
+        if v['warning']:
+            print(f"WARNING {v['id']}: {v['warning']}")
     rep_m = dict(rep, gaps_too_big=[{'at_m': [round(c * k, 3) for c in g['at']], 'gap_mm': round(g['gap'] * k * 1000, 1)}
                                     for g in rep['gaps_too_big']],
                  dangling_examples=[[round(c * k, 3) for c in p] for p in rep['dangling_examples']],
