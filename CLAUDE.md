@@ -12,6 +12,8 @@ This folder holds the И4 course work (source: maitapp.com/i4/programa/day0/).
 
 ## Two build paths
 - **Path 1: PDF/DXF → Revit (BIM, documents)** via the EE engine (`C:\EE_engine`). Spec: `specs/001`.
+- **`/build-3d <project>`** (skill in `.claude/skills/build-3d/`) runs Path 2 end to end: measures what the drawing
+  contains, asks only what it can't, builds, verifies, reports. Projects so far: `venelin_r4`, `harmanli`.
 - **Path 2: AutoCAD drawing → SketchUp (visual model only).** Read `docs/pipeline-autocad-sketchup.md`
   before any AutoCAD or SketchUp work. Tools in `tools/acad/`, `tools/sketchup/`, `tools/*.py`.
 - AutoCAD: READ-ONLY, never modify or save a DWG. If AutoCAD is busy, ask the user to press Esc; don't retry in a loop.

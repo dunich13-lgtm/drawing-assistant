@@ -14,6 +14,9 @@ AutoCAD (open DWG, READ-ONLY) ──COM (PowerShell) / inline AutoLISP──► 
 The DWG is never written. Every SketchUp change is a re-runnable builder that erases its own named
 root group and rebuilds it, as one undo step.
 
+**Normally you just type `/build-3d <project>`** — the skill runs `tools\build_3d.ps1` (all stages below), stops
+only for what the drawing can't tell, and reports. The sections below are the manual reference.
+
 ## Setup on this PC
 
 | Needed | Status (checked 2026-11-27) |
