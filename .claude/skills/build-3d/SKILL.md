@@ -52,5 +52,5 @@ build step rejects clicks outside the right plans).
 ## 4. Finish
 Show the user: the overview render (`views/<p>_overview.png`, read it and check it first), one table per floor
 (base → top, source), counts (walls, openings by kind, slabs), the verify line (must be "within 1 cm: all"), every
-NOTE/disagreement from the log, and what is not built yet (stairs, window/door objects, facade elements until
-NIN-13–15 are done). Point to `data/<p>/build_report.md`. Remind: the SketchUp model is not saved.
+NOTE/disagreement from the log, the facade notes (roofs over lower parts, eaves: built or why left out), and what
+is not built yet (sloping roofs; canopies/cladding drawn only in facades). Point to `data/<p>/build_report.md`. Remind: the SketchUp model is not saved.

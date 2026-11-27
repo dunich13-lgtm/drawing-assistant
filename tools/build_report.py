@@ -48,7 +48,9 @@ def main(project, verify=None):
              json.load(open(os.path.join(pdir, 'building_answers.json'), encoding='utf-8')).get('stairs_left_out') else
              ['- stairs: built from the plan drawings (see stairs.json); "PLEASE CHECK" where steps were added past the drawn end']),
            f"- slabs: {b['counts'].get('slabs', 0)}, thickness confirmed or measured in the sections, top at each floor level; "
-           'walls still run floor-to-floor (they overlap the slab above by its thickness)']
+           'walls still run floor-to-floor (they overlap the slab above by its thickness)',
+           f"- facade elements: {b['counts'].get('facade', 0)} (roofs over lower parts, eaves overhang)" +
+           ''.join(f'\n  - {n}' for n in b.get('facade_notes', []))]
     out = os.path.join(pdir, 'build_report.md')
     open(out, 'w', encoding='utf-8').write('\n'.join(md) + '\n')
     print('\n'.join(md))

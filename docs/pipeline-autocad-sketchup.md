@@ -152,3 +152,14 @@ python tools\massing_from_labels.py data\massing_src.tsv data\massing.json --uni
 ```
 Then verify: `SuInspect.probe_down(x, y, 100)` at each label (top = labelled height) and renders.
 | `data/`, `views/`, `bridge/` | Working data, renders, bridge queues — gitignored, never pushed (client data) |
+
+## Facade elements (NIN-15, `tools/facade.py`, runner stage 7c)
+Runs after `build_data.py`, adds its elements to `build.json` (re-runnable), asks nothing:
+- **Roof over a lower part:** a floor's filled outline minus the floor above (pieces narrower than 1.2 m are outline
+  noise and dropped); flat slab at the upper floor level, floor-slab thickness.
+- **Eaves overhang:** outline from the roof plan (plan titled покрив / roof / Dach…, its elevation linework), placed by
+  the top floor's offset + k sheet steps (best overlap). Eave band = lowest long horizontal line pair above the top
+  floor in the facades (median over all facades). If the roof outline is consistently wider than the facade eave
+  lines (gutter line), it is inset to match the facades. Only the ring outside the top-floor walls is built.
+- Left out and reported: no roof plan, no eave band, canopies with no plan outline (e.g. Harmanli's steel canopy,
+  only in facades), cladding.

@@ -76,6 +76,8 @@ if ($profile -eq 'building') {
     if (-not $slab -and ($mslab -eq 'None' -or -not $mslab)) { Stop-For-User 'slab thickness: not measurable in the sections (build_data.py --slab <m>)' }
     Run @($py, (Join-Path $root 'tools\build_data.py'), $Project)
     $check = Json 'build.json' "','.join(v['id'] for v in d['views'] if v.get('check'))"
+    Step '7c facade elements'
+    Run @($py, (Join-Path $root 'tools\facade.py'), $Project)
 }
 if ($check) { Write-Output "NOTE: placement of $check was found by footprint only - please check it in SketchUp (build_data.py --confirm-placement $check)" }
 
