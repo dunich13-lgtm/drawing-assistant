@@ -291,7 +291,7 @@ def main():
         smat = ['DWG stair', [205, 200, 190], None]
         for sc in json.load(open(spath, encoding='utf-8'))['staircases']:
             o = offsets.get(sc['view'])
-            if not o:
+            if not o or sc.get('skip'):
                 continue
             sh = lambda p: [round(p[0] + (o['dx'] if o['moved'] else 0), 4), round(p[1] + (o['dy'] if o['moved'] else 0), 4)]
             src = f"stair {sc['id']}: {sc['rise_source']}; {sc['walk_line']}" + (f"; {sc['check']}" if sc.get('check') else '')

@@ -88,9 +88,14 @@ def merge_split(flights, max_gap=0.7):
                 gap = min(abs(gpos[0] - fpos[-1]), abs(fpos[0] - gpos[-1]))
                 if gap > max_gap:
                     continue
+                if abs(f['going'] - g['going']) > 0.04:      # different step size: not two pieces of one flight
+                    continue
                 lines = f['lines'] + g['lines']
                 key = lambda l: ((l[0][0] + l[1][0]) / 2 - f['m0'][0]) * f['n'][0] + ((l[0][1] + l[1][1]) / 2 - f['m0'][1]) * f['n'][1]
                 lines.sort(key=key)
+                ps = [key(l) for l in lines]
+                if min(b_ - a_ for a_, b_ in zip(ps, ps[1:])) < 0.15:   # overlapping pieces, not a continuation
+                    continue
                 f['lines'] = lines
                 f['pos'] = [key(l) for l in lines]
                 f['width'] = max(f['width'], g['width'])
@@ -102,7 +107,15 @@ def merge_split(flights, max_gap=0.7):
                 break
             if merged:
                 break
-    return flights
+    flights = [f for f in flights if 0.18 <= f['going'] <= 0.42]      # a real step going, after merging
+    # the same flight drawn twice (overlapping lines, often inside blocks) counts once
+    out = []
+    for f in sorted(flights, key=lambda f: -len(f['lines'])):
+        h = MultiPoint([p for l in f['lines'] for p in l]).convex_hull
+        if any(h.intersection(o).area > 0.8 * min(h.area, o.area) for o in [MultiPoint([p for l in x['lines'] for p in l]).convex_hull for x in out]):
+            continue
+        out.append(f)
+    return out
 
 
 def flights_from(segs, min_n=3):
@@ -185,6 +198,69 @@ def walk_line(ents, k, flights):
     return ls, 'walk line direction ASSUMED (no circle at either end)'
 
 
+def walk_symbols(ents, k):
+    """Walk-line symbols: an open polyline with a CIRCLE at one end (the bottom). Returns oriented LineStrings."""
+    circles = [Point(e['center'][0] * k, e['center'][1] * k) for e in ents if e['type'] == 'CIRCLE' and 'center' in e]
+    out = []
+    for e in ents:
+        if e['type'] != 'LWPOLYLINE' or not e['paths'] or e.get('closed'):
+            continue
+        pts = [(p[0] * k, p[1] * k) for p in e['paths'][0]]
+        ls = LineString(pts)
+        if ls.length < 0.5:
+            continue
+        s, t = Point(pts[0]), Point(pts[-1])
+        ds = min((s.distance(c) for c in circles), default=9)
+        dt = min((t.distance(c) for c in circles), default=9)
+        if min(ds, dt) < 0.25:
+            out.append(ls if ds <= dt else LineString(pts[::-1]))
+    return out
+
+
+def orient_from(flights, wl):
+    """Flights the walk line crosses take its direction; the others follow the stair's geometry: a flight beside
+    (antiparallel) the previous one runs the opposite way (U-stair), one in line with it runs the same way.
+    Returns the flights in walking order."""
+    def hull(f):
+        return MultiPoint([p for l in f['lines'] for p in l]).convex_hull
+    def up_of(f):
+        a, b = f['lines'][0], f['lines'][-1]
+        d = ((b[0][0] + b[1][0]) / 2 - (a[0][0] + a[1][0]) / 2, (b[0][1] + b[1][1]) / 2 - (a[0][1] + a[1][1]) / 2)
+        n = math.hypot(*d) or 1
+        return (d[0] / n, d[1] / n)
+    crossed = [f for f in flights if wl.intersects(hull(f).buffer(0.05))]
+    if not crossed:
+        return None
+    for f in crossed:
+        t = wl.project(hull(f).centroid)
+        p0 = wl.interpolate(max(0, t - 0.2)); p1 = wl.interpolate(min(wl.length, t + 0.2))
+        up = (p1.x - p0.x, p1.y - p0.y)
+        u = up_of(f)
+        if up[0] * u[0] + up[1] * u[1] < 0:
+            f['lines'] = f['lines'][::-1]
+    first = min(crossed, key=lambda f: wl.project(hull(f).centroid))
+    order, rest = [first], [f for f in flights if f is not first]
+    while rest:
+        cur = order[-1]
+        top = cur['lines'][-1]
+        top_c = Point((top[0][0] + top[1][0]) / 2, (top[0][1] + top[1][1]) / 2)
+        nxt = min(rest, key=lambda f: hull(f).distance(top_c))
+        if nxt not in crossed:
+            uc, un = up_of(cur), up_of(nxt)
+            side = abs(uc[0] * un[0] + uc[1] * un[1]) > 0.9
+            # beside the current flight (U-turn) -> opposite direction; in line -> same direction
+            ln = ((nxt['lines'][0][0][0] - top[0][0]) * uc[0] + (nxt['lines'][0][0][1] - top[0][1]) * uc[1])
+            beside = hull(nxt).distance(hull(cur)) < 0.5 and abs(ln) < 0.8 * len(cur['lines']) * cur['going']
+            want = (-uc[0], -uc[1]) if (side and beside) else uc
+            if un[0] * want[0] + un[1] * want[1] < 0:
+                nxt['lines'] = nxt['lines'][::-1]
+        order.append(nxt)
+        rest.remove(nxt)
+    for i, f in enumerate(order):
+        f['t'] = i
+    return order
+
+
 def staircases(flights, max_gap=2.5):
     """flights that are close to each other belong to one staircase"""
     groups = []
@@ -211,7 +287,16 @@ def main():
     gpath = os.path.join(pdir, 'geometry_stairs.tsv')
     if not os.path.exists(gpath):
         sys.exit('no stair geometry: tools\\acad\\acad_geo_dump.ps1 -Project <p> -Roles stairs')
-    ents = geom.load(gpath)
+    import blocks
+    ents = blocks.expand(geom.load(gpath), a.project)          # stair blocks (walk-line symbols, whole stairs)
+    if blocks.expand.missing:
+        print('NOTE block definitions not dumped yet:', ', '.join(blocks.expand.missing),
+              f'(tools\\acad\\acad_dump_block_defs.ps1 -Project {a.project} -Names ...)')
+    # pool for treads drawn elsewhere: every geometry dump of the project (object layers, layer 0, ...), blocks expanded
+    obj_ents = []
+    for gp in sorted(glob.glob(os.path.join(pdir, 'geometry_*.tsv'))):
+        if not gp.endswith(('geometry_stairs.tsv', 'geometry_opening_section_view.tsv')):
+            obj_ents += blocks.expand(geom.load(gp), a.project)
     bviews = {v['id']: v for v in bd['views']}
     vbox = {v['id']: v['bbox_m'] for v in ar['views']}
 
@@ -249,20 +334,64 @@ def main():
             skipped.append(f"{vid} ({v['title'][:30]}): top floor - its stair drawing shows the flights arriving from below")
             continue
         fl = merge_split(flights_from(segments(es, k)))
-        for si, g in enumerate(staircases(fl)):
+        groups = staircases(fl)
+        for g in groups:
+            g['treads_from'] = 'the stair layer'
+        # walk-line symbols without treads on the stair layer: the treads are drawn on another layer (e.g. the wall
+        # layer of a survey drawing) - take straight pieces of ANY object layer around the symbol
+        hull_of = lambda f: MultiPoint([p for l in f['lines'] for p in l]).convex_hull
+        # stairs drawn on other layers / as blocks: flights in ALL geometry of this plan (blocks expanded), accepted
+        # only next to a walk-line symbol (stair layer or inside blocks) so parallel wall lines never become stairs
+        b = vbox[vid]
+        inside = lambda e: e['paths'] and all(b[0] - 1 <= p[0] * k <= b[2] + 1 and b[1] - 1 <= p[1] * k <= b[3] + 1 for p in e['paths'][0][:2])
+        pool = [e for e in obj_ents if inside(e)]
+        syms = walk_symbols(es, k) + walk_symbols(pool, k)
+        taken = [hull_of(f) for g in groups for f in g['flights']]
+        pool_fl = [f for f in merge_split(flights_from(segments(pool, k)))
+                   if any(hull_of(f).distance(s) < 3.0 for s in syms) and not any(hull_of(f).intersects(t) for t in taken)]
+        for g in staircases(pool_fl):
+            g['treads_from'] = 'other layers / blocks next to a walk-line symbol (no treads on the stair layer)'
+            gh = MultiPoint([p for f in g['flights'] for l in f['lines'] for p in l]).convex_hull
+            g['symbol'] = min(syms, key=lambda s: gh.distance(s)) if syms else None
+            groups.append(g)
+        for si, g in enumerate(groups):
             wl, wl_src = walk_line(es, k, g['flights'])
+            if g.get('symbol') is not None and (wl is None or wl.distance(g['symbol']) > 0.5):
+                wl, wl_src = g['symbol'], 'walk-line symbol: circle = bottom'
             steps_total = sum(len(f['lines']) for f in g['flights'])
-            # order flights along the walk line, orient each one up the stair
-            for f in g['flights']:
-                mid = f['lines'][len(f['lines']) // 2]
-                c = ((mid[0][0] + mid[1][0]) / 2, (mid[0][1] + mid[1][1]) / 2)
-                f['t'] = wl.project(Point(c)) if wl else 0
-                if wl:
-                    p0 = wl.interpolate(max(0, f['t'] - 0.2)); p1 = wl.interpolate(min(wl.length, f['t'] + 0.2))
-                    up = (p1.x - p0.x, p1.y - p0.y)
-                    if up[0] * f['n'][0] + up[1] * f['n'][1] < 0:
-                        f['lines'] = f['lines'][::-1]
-            g['flights'].sort(key=lambda f: f['t'])
+            crosses_all = wl is not None and all(wl.intersects(hull_of(f).buffer(0.05)) for f in g['flights'])
+            if wl is not None and not crosses_all:
+                order = orient_from(g['flights'], wl)
+                if order:
+                    g['flights'] = order
+                    g['partial_walk'] = True
+                    wl_src += '; flights not on the walk line oriented from the stair geometry (U-turn = opposite way)'
+                    # several stairs drawn together (one block): keep the chain whose rise fits this storey best
+                    best, cum = None, 0
+                    for i, f in enumerate(order):
+                        cum += len(f['lines'])
+                        r = H / cum
+                        if 0.15 <= r <= 0.21 and (best is None or abs(r - 0.175) < abs(H / best[1] - 0.175)):
+                            best = (i + 1, cum)
+                    if best and best[0] < len(order):
+                        left = order[best[0]:]
+                        g['flights'] = order[:best[0]]
+                        questions.append(f"{vid}: {len(left)} more flight(s) ({', '.join(str(len(f['lines'])) for f in left)} "
+                                         f"risers) drawn with this stair look like a separate stair (entrance/basement steps?) "
+                                         f"- not built")
+                    steps_total = sum(len(f['lines']) for f in g['flights'])
+            else:
+                # order flights along the walk line, orient each one up the stair
+                for f in g['flights']:
+                    mid = f['lines'][len(f['lines']) // 2]
+                    c = ((mid[0][0] + mid[1][0]) / 2, (mid[0][1] + mid[1][1]) / 2)
+                    f['t'] = wl.project(Point(c)) if wl else 0
+                    if wl:
+                        p0 = wl.interpolate(max(0, f['t'] - 0.2)); p1 = wl.interpolate(min(wl.length, f['t'] + 0.2))
+                        up = (p1.x - p0.x, p1.y - p0.y)
+                        if up[0] * f['n'][0] + up[1] * f['n'][1] < 0:
+                            f['lines'] = f['lines'][::-1]
+                g['flights'].sort(key=lambda f: f['t'])
             hull = MultiPoint([p for f in g['flights'] for l in f['lines'] for p in l]).convex_hull
             note = min(notes, key=lambda n_: hull.distance(Point(n_['at'])), default=None)
             note = note if note and hull.buffer(0.8).contains(Point(note['at'])) else None   # only a note AT the stair
@@ -290,6 +419,7 @@ def main():
                 rise_src = f'floor-to-floor {H:.2f} m / {steps_total} tread lines counted in the plan'
             sc = {'id': f'{vid}.ST{si + 1}', 'view': vid, 'base': v['base'], 'floor_to_floor': H, 'risers': steps_total,
                   'rise': round(rise, 4) if rise else None, 'walk_line': wl_src, 'rise_source': rise_src,
+                  'treads_from': g.get('treads_from'),
                   'note': note and note['text'], 'flights': []}
             if note:
                 sc['note_check'] = f"note '{note['text']}': {steps_total} risers × {rise:.3f} m (drawn {counted})"
@@ -299,7 +429,9 @@ def main():
             if not wl:
                 questions.append(f"{sc['id']}: which end of the stair is the bottom? (no walk line found)")
             if rise and not (0.13 <= rise <= 0.21):
-                questions.append(f"{sc['id']}: rise {rise:.3f} m is unusual - check the tread count ({steps_total}) or floor height")
+                sc['skip'] = True     # never build a stair the drawing doesn't really describe
+                questions.append(f"{sc['id']}: {steps_total} risers for {H:.2f} m would be {rise:.3f} m each - the plan does not "
+                                 f"draw this stair completely; NOT built (draw/complete it, or tell the step count)")
             z = v['base']
             for fi, f in enumerate(g['flights']):
                 lines = f['lines']
@@ -326,14 +458,14 @@ def main():
                 nu = math.hypot(*up1) or 1
                 up1 = (up1[0] / nu, up1[1] / nu)
                 mid1 = Point((l1[0][0] + l1[1][0]) / 2, (l1[0][1] + l1[1][1]) / 2)
-                if wl is not None:
+                if wl is not None and not g.get('partial_walk'):
                     seg = [wl.interpolate(t) for t in (g1['t'], g2['t'])]
                     part = LineString([wl.interpolate(g1['t'] + (g2['t'] - g1['t']) * s / 20) for s in range(21)]) if g2['t'] > g1['t'] else None
                     # farthest point of the walk line between the flights, measured along up1 from the last riser
                     far = max((((p[0] - mid1.x) * up1[0] + (p[1] - mid1.y) * up1[1]) for p in part.coords), default=0) if part else 0
                     depth = max(0.6, min(2 * far, 1.1 * max(g1['width'], g2['width'])))   # ~ a flight width
                 else:
-                    depth = g1['width']
+                    depth = 1.0 * max(g1['width'], g2['width'])          # no walk line through it: ~ a flight width
                 shift = lambda l, d: [(l[0][0] + up1[0] * d, l[0][1] + up1[1] * d), (l[1][0] + up1[0] * d, l[1][1] + up1[1] * d)]
                 pts = list(l1) + shift(l1, depth) + list(l2) + shift(l2, depth)
                 land = MultiPoint(pts).convex_hull
