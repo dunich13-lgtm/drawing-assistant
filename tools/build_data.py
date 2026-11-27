@@ -192,6 +192,11 @@ def main():
 
     slabs = 0
     t = bans.get('slab_thickness_m')
+    t_src = f'slab thickness {t} m (confirmed by the user)' if t else None
+    mpath = os.path.join(pdir, 'measured.json')
+    ms = (json.load(open(mpath, encoding='utf-8')).get('slab_thickness') if os.path.exists(mpath) else None)
+    if not t and ms:                                   # measured in the sections: automatic
+        t, t_src = ms['value'], f"slab thickness {ms['value']} m, {ms['source']} (automatic)"
     if pj.get('profile') == 'building' and t:
         from shapely.geometry import Polygon
         from shapely.ops import unary_union
@@ -207,7 +212,7 @@ def main():
                 elements.append({'id': f'{v}.slab{i + 1}', 'area': None, 'view': v, 'kind': 'slab', 'layer': 'DWG slab',
                                  'base': round(base - t, 4), 'top': base,
                                  'outline': [[round(x, 4), round(y, 4)] for x, y in p.exterior.coords], 'holes': [],
-                                 'base_source': f'slab thickness {t} m (confirmed by the user) under the floor level',
+                                 'base_source': f'{t_src}, under the floor level',
                                  'height_source': f'outer outline of the walls and openings of {v}; top = floor level {base:+.2f}'})
                 slabs += 1
 

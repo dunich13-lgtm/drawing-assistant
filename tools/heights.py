@@ -152,9 +152,12 @@ def resolve(areas, views, labels, layermap, answers, profile, sections=None):
                 cand['height'].append((3, float(rule['height_rule']), f"layer rule for '{lay}'"))
             if rule.get('base_rule') is not None:
                 cand['base'].append((3, float(rule['base_rule']), f"layer rule for '{lay}'"))
-        if a['view'] in accepted:
+        # Title levels are read from the drawing itself: used automatically (user, 2026-11-27), unless the project
+        # switches it off ("auto_drawing_values": false); an explicit acceptance is still recorded as such.
+        if a['view'] in accepted or answers.get('auto_drawing_values', True):
             for k2, (v, s) in proposal.get(a['view'], {}).items():
-                cand[k2].append((4, v, s + ' (confirmed by the user)'))
+                tag = ' (confirmed by the user)' if a['view'] in accepted else ' (automatic: read from the drawing)'
+                cand[k2].append((4, v, s.replace('proposal: ', 'drawing: ') + tag))
         for scope, target in (('view', a['view']), ('layer', a['layers'][0] if a['layers'] else None)):
             for k2 in ('base', 'height'):
                 if target in ans[scope] and k2 in ans[scope][target]:

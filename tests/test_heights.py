@@ -43,8 +43,11 @@ check('A6: labels give height 5.60 and base 0.45', res['A6']['height'] == 5.6 an
 check('A7: user answer for the area -> resolved', res['A7']['status'] == 'resolved' and 'user answer' in res['A7']['height_source'])
 check('label outside every area is reported', any(c['what'] == 'label outside every buildable area' for c in conf))
 check('questions list V2 (height missing)', any(q['view'] == 'V2' and q['missing'] == ['height'] for q in qs), qs)
-r2, q2, _, _ = H.resolve(areas, views, labels, layermap, {'accepted_views': [], 'set': {}}, 'building')
-check('without acceptance, proposals are NOT used', r2['A1']['status'] == 'needs_answer' and r2['A1']['base'] is None)
+r2, q2, _, _ = H.resolve(areas, views, labels, layermap, {'accepted_views': [], 'set': {}, 'auto_drawing_values': False}, 'building')
+check('with automatic drawing values OFF and no acceptance, title levels are NOT used', r2['A1']['status'] == 'needs_answer' and r2['A1']['base'] is None)
+r4, _, _, _ = H.resolve(areas, views, labels, layermap, {'accepted_views': [], 'set': {}}, 'building')
+check('by default, title levels are used automatically and say so', r4['A1']['status'] == 'resolved'
+      and 'automatic: read from the drawing' in r4['A1']['base_source'], r4['A1']['base_source'])
 r3, q3, _, _ = H.resolve(areas, views, labels, layermap, dict(answers, skipped_views=['V2']), 'building')
 check('skipped view: its areas are not built and not asked', 'A4' not in r3 and not any(q['view'] == 'V2' for q in q3))
 print(f'\n{sum(ok)}/{len(ok)} passed'); sys.exit(0 if all(ok) else 1)

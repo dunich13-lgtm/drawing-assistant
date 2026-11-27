@@ -125,7 +125,10 @@ def main():
     if a.set:
         json.dump(ans, open(apath, 'w', encoding='utf-8'), indent=1)
 
-    door_layers = {n for n, v in lm.items() if v['role'] == 'opening' and any(w in n.lower() for w in ('door', 'врат'))}
+    mpath = os.path.join(pdir, 'measured.json')
+    measured = json.load(open(mpath, encoding='utf-8')).get('openings', {}) if os.path.exists(mpath) else {}
+    disagreements = set()
+    door_layers = {n for n, v in lm.items() if v['role'] == 'opening' and any(w in n.lower() for w in ('door', 'врат', 'tür', 'tuer'))}
     open_layers = {n for n, v in lm.items() if v['role'] == 'opening'}
     blocks = []
     for path in glob.glob(os.path.join(pdir, 'inventory', '*.tsv')):
@@ -133,6 +136,22 @@ def main():
             if r[0] == '*Model' and r[1] == 'INSERT' and r[2] in open_layers and len(r) > 5:
                 x, y = (float(c) * k for c in r[5].split(',')[:2])
                 blocks.append({'pt': Point(x, y), 'kind': 'door' if r[2] in door_layers else 'window', 'layer': r[2], 'name': r[4]})
+    # Doors/windows are often drawn as plain geometry (swing arcs, frame lines), not blocks: use any entity on an
+    # opening layer (from the geometry dump) as evidence too, placed at the centre of its bounding box.
+    gpath = os.path.join(pdir, 'geometry_opening_section_view.tsv')
+    if os.path.exists(gpath):
+        import geom
+        for e in geom.load(gpath):
+            if e['layer'] not in open_layers or e['type'] == 'INSERT':
+                continue
+            pts = [p for path in e['paths'] for p in path]
+            if pts:
+                xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+                if (max(xs) - min(xs)) * k > 4 or (max(ys) - min(ys)) * k > 4:
+                    continue                    # long lines (facade/section linework on these layers) say nothing
+                blocks.append({'pt': Point((min(xs) + max(xs)) / 2 * k, (min(ys) + max(ys)) / 2 * k),
+                               'kind': 'door' if e['layer'] in door_layers else 'window', 'layer': e['layer'],
+                               'name': e['type'].lower()})
     btree = STRtree([b['pt'] for b in blocks]) if blocks else None
 
     built_views = {v['id']: v for v in bd['views']}
@@ -156,11 +175,18 @@ def main():
                     blk = min(near, key=lambda b: g['geom'].distance(b['pt']))
                     kind = blk['kind']
             sources = {}
+            meas_kind = measured.get(kind) or (measured.get('door') if kind == 'passage' else None)
             for what in ('sill', 'head'):
-                if kind in ans and what in ans[kind]:
+                if kind in ans and what in ans[kind]:          # the user's explicit answer wins
                     sources[what] = (ans[kind][what], f'typical {kind} {what} for this project (confirmed by the user)')
+                    if meas_kind and abs(meas_kind[what] - ans[kind][what]) > 0.02:
+                        disagreements.add(f"{kind} {what}: user {ans[kind][what]:.2f} vs {meas_kind['source']}")
+                elif meas_kind:                                 # measured in the drawing: automatic
+                    sources[what] = (meas_kind[what], f"{meas_kind['source']} (automatic)")
+                elif what == 'sill' and kind in ('door', 'passage'):
+                    sources[what] = (0.0, f'{kind}: starts at the floor')
                 else:
-                    sources[what] = (None, f'proposal: typical {kind} {what} {PROPOSAL[kind][what]:.2f} - needs confirmation')
+                    sources[what] = (None, f'not measurable in the drawing - ask (typical {kind} {what} is often {PROPOSAL[kind][what]:.2f})')
             adj = [wtree_items[i][1] for i in wtree.query(g['geom'].buffer(0.02))]
             layer = collections.Counter((x['layers'] or ['?'])[0] for x in adj).most_common(1)[0][0] if adj else '?'
             outline = [[round(x + (v['dx'] if v['moved'] else 0), 4), round(y + (v['dy'] if v['moved'] else 0), 4)]
@@ -176,10 +202,16 @@ def main():
         if a.plot and vid in a.plot.split(','):
             plot(a.project, vid, walls, [o for o in openings if o['view'] == vid], v)
     resolved = sum(1 for o in openings if o['sill'] is not None and o['head'] is not None)
-    json.dump({'project': a.project, 'answers': ans, 'proposal': PROPOSAL, 'openings': openings, 'per_view': summary},
+    missing = sorted({f"{o['kind']}.{w}" for o in openings for w in ('sill', 'head') if o[w] is None})
+    json.dump({'project': a.project, 'answers': ans, 'measured': measured, 'proposal': PROPOSAL, 'openings': openings,
+               'per_view': summary, 'missing': missing, 'disagreements': sorted(disagreements)},
               open(os.path.join(pdir, 'openings.json'), 'w', encoding='utf-8'), ensure_ascii=False)
     tot = collections.Counter(o['kind'] for o in openings)
     print(f"openings {len(openings)} ({dict(tot)}) | heights resolved {resolved} | opening blocks in drawing {len(blocks)}")
+    if missing:
+        print('ASK (not measurable in the drawing):', ', '.join(f"{m} (often {PROPOSAL[m.split('.')[0]][m.split('.')[1]]:.2f})" for m in missing))
+    for d in sorted(disagreements):
+        print('NOTE user answer differs from the drawing:', d)
     for vid, c in summary.items():
         print(f"  {vid:4} {built_views[vid]['title'][:34]:34} {c}")
     lens = collections.Counter((o['kind'], round(o['length_m'], 1)) for o in openings)

@@ -45,6 +45,9 @@ if ([int]$warn -gt 0) { Stop-For-User 'a view probably holds several plans (see 
 Step '4 sections / facades (level scales)'
 Run @($py, (Join-Path $root 'tools\sections.py'), $Project)
 
+Step '4b measure in the drawing (slab thickness, typical openings)'
+Run @($py, (Join-Path $root 'tools\measure.py'), $Project)
+
 Step '5 heights'
 Run @($py, (Join-Path $root 'tools\heights.py'), $Project)
 $open = Json 'heights.json' "sum(1 for r in d['areas'].values() if r['status']!='resolved')"
@@ -57,10 +60,11 @@ $profile = Json 'project.json' "d.get('profile')"
 if ($profile -eq 'building') {
     Step '7 openings (building profile)'
     Run @($py, (Join-Path $root 'tools\openings.py'), $Project)
-    $unres = Json 'openings.json' "sum(1 for o in d['openings'] if o['sill'] is None or o['head'] is None)"
-    if ([int]$unres -gt 0) { Stop-For-User "$unres openings need typical sill/head heights for this project (openings.py --set window.sill=.. --set window.head=.. --set door.sill=0 --set door.head=.. --set passage.sill=0 --set passage.head=..)" }
+    $miss = Json 'openings.json' "', '.join(d['missing'])"
+    if ($miss) { Stop-For-User "not measurable in the drawing: $miss (openings.py --set kind.what=value)" }
     $slab = Json 'building_answers.json' "d.get('slab_thickness_m')"
-    if (-not $slab) { Stop-For-User 'slab thickness for this project (build_data.py --slab 0.2)' }
+    $mslab = Json 'measured.json' "(d.get('slab_thickness') or {}).get('value')"
+    if (-not $slab -and ($mslab -eq 'None' -or -not $mslab)) { Stop-For-User 'slab thickness: not measurable in the sections (build_data.py --slab <m>)' }
     Run @($py, (Join-Path $root 'tools\build_data.py'), $Project)
     $check = Json 'build.json' "','.join(v['id'] for v in d['views'] if v.get('check'))"
 }
