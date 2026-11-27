@@ -52,6 +52,8 @@ def load(path):
         if len(f) < 3:
             continue
         typ, layer, handle, d = f[0], f[1], f[2], f[3:]
+        mirrored = typ.endswith('~')            # extrusion (0,0,-1): OCS x axis points to world -x
+        typ = typ.rstrip('~')
         e = {'type': typ, 'layer': layer, 'handle': handle, 'paths': []}
         try:
             if typ == 'LINE':
@@ -91,6 +93,11 @@ def load(path):
         except (ValueError, IndexError):
             e['paths'] = []
             e['parse_error'] = True
+        if mirrored:
+            e['paths'] = [[(-x, y) for x, y in p] for p in e['paths']]
+            if 'center' in e:
+                e['center'] = (-e['center'][0], e['center'][1])
+            e['mirrored'] = True
         ents.append(e)
     return ents
 

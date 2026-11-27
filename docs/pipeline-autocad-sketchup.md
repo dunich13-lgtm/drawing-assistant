@@ -52,6 +52,17 @@ Output in `data/<name>/`: `layermap.json` (role per layer, reason, confidence, o
 `project.json` (units, scale to m, ±0.00 + source, gap tolerance, profile), `setup_summary.md`.
 Unknown layers block the confirmation. Never confirm on the user's behalf.
 
+**Closed areas (NIN-7) — after the setup is confirmed:**
+```powershell
+& tools\acad\acad_geo_dump.ps1 -Project <name>               # geometry of the object layers (curves, hatches, mirrored OCS)
+python tools\areas.py <name> --plot                           # -> data\<name>\areas.json + views\<name>\areas_overview.png
+python tools\areas.py <name> --plot-view V24                  # one view, with the too-big gaps circled in red
+python tests\test_areas.py                                    # acceptance check 1: every drawing style
+```
+`areas.json`: views (plan / section / elevation / unknown, named by the nearest title) and every closed area
+(explicit = drawn closed; cell = closed by loose linework) with view, layers, parent, area, perimeter, mean width,
+holes, outline in metres; report: gaps joined, gaps too big (5–50 mm, ask), dangling ends, overlapping lines.
+
 **First look at an unknown drawing (manual):**
 ```powershell
 & tools\acad\acad_run_lisp.ps1 -Lisp dwg_inventory.lsp -Call '(di-dump "{OUT}")' -Out dwg_inventory.tsv
