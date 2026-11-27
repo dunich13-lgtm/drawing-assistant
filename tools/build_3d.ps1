@@ -62,6 +62,12 @@ if ($profile -eq 'building') {
     Run @($py, (Join-Path $root 'tools\openings.py'), $Project)
     $miss = Json 'openings.json' "', '.join(d['missing'])"
     if ($miss) { Stop-For-User "not measurable in the drawing: $miss (openings.py --set kind.what=value)" }
+    $hasStairs = Json 'layermap.json' "sum(1 for v in d['layers'].values() if v['role']=='stairs')"
+    if ([int]$hasStairs -gt 0) {
+        Step '7b stairs'
+        if ($Refresh -or -not (Test-Path (Join-Path $data 'geometry_stairs.tsv'))) { & (Join-Path $root 'tools\acad\acad_geo_dump.ps1') -Project $Project -Roles stairs }
+        Run @($py, (Join-Path $root 'tools\stairs.py'), $Project)
+    }
     $slab = Json 'building_answers.json' "d.get('slab_thickness_m')"
     $mslab = Json 'measured.json' "(d.get('slab_thickness') or {}).get('value')"
     if (-not $slab -and ($mslab -eq 'None' -or -not $mslab)) { Stop-For-User 'slab thickness: not measurable in the sections (build_data.py --slab <m>)' }

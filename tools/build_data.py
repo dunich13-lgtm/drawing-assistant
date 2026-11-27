@@ -284,6 +284,27 @@ def main():
                                  'height_source': f"head {o['head_source']}"})
                 objects += 1
 
+    # ---- stairs (NIN-14): stepped solids + landings from tools/stairs.py, moved with their floor ---------------
+    stair_parts = 0
+    spath = os.path.join(pdir, 'stairs.json')
+    if os.path.exists(spath):
+        smat = ['DWG stair', [205, 200, 190], None]
+        for sc in json.load(open(spath, encoding='utf-8'))['staircases']:
+            o = offsets.get(sc['view'])
+            if not o:
+                continue
+            sh = lambda p: [round(p[0] + (o['dx'] if o['moved'] else 0), 4), round(p[1] + (o['dy'] if o['moved'] else 0), 4)]
+            src = f"stair {sc['id']}: {sc['rise_source']}; {sc['walk_line']}" + (f"; {sc['check']}" if sc.get('check') else '')
+            parts = [(f"{sc['id']}.f{fi + 1}s{si + 1}", st) for fi, f in enumerate(sc['flights']) for si, st in enumerate(f['steps'])]
+            parts += [(f"{sc['id']}.landing{li + 1}", l) for li, l in enumerate(sc['landings'])]
+            for pid, st in parts:
+                elements.append({'id': pid, 'area': None, 'view': sc['view'], 'kind': 'object:stair', 'layer': 'DWG stairs',
+                                 'tag': 'DWG stairs', 'mat': smat, 'base': st['base'], 'top': st['top'],
+                                 'outline': [sh(p) for p in st['outline']], 'holes': [],
+                                 'base_source': src, 'height_source': src})
+                stair_parts += 1
+    objects += stair_parts
+
     slabs = 0
     t = bans.get('slab_thickness_m')
     t_src = f'slab thickness {t} m (confirmed by the user)' if t else None
