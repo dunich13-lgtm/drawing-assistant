@@ -53,6 +53,10 @@ one way of drawing**: a wall can be 4 loose lines, a hatched rectangle, or open/
 
 ### R5 — Building profile
 - [ ] Classifies areas as walls / slabs / other (shape + layer + user confirmation); door and window holes from opening blocks or gaps in walls, heights from sections or labels; floors stacked by level marks.
+- [ ] **Openings are not full-height slots** (user, 2026-11-27): wall infill below each window (to the sill) and above every
+      door/window (from the head to the top of the wall); sill/head heights from the **sections and facades** first,
+      then block attributes / schedule, else ask.
+- [x] Floors stacked (done in NIN-10: shape match, footprint fallback marked "please check").
 
 ### R6 — Verify and report
 - [ ] Counts (areas found / built / skipped), probes at labels and level marks, renders: one perspective + plan cut, compared with the DWG.
