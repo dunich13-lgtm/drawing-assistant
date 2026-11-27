@@ -3,6 +3,7 @@
 ;; Columns: owner  type  layer  handle  [INSERT: name x,y,z rot_rad sx,sy | TEXT/MTEXT/ATTRIB/ATTDEF: tag x,y,z height text
 ;;          | ACAD_TABLE: "" x,y,z rows cols | DIMENSION: "" defpoint measurement]
 ;; Owner is the block name, "*<layout>" for model/paper space (e.g. *Model), "*SUB" for attributes of model inserts.
+;; Header lines first: #DWG name, #PATH folder, #UNITS insunits code, #EXTMIN / #EXTMAX drawing extents.
 ;; Call: (di-dump "C:/path/out.tsv")
 ;; Comments must stay on their own lines: the runner strips them before sending the code inline.
 (defun di-p (p) (if p (strcat (rtos (car p) 2 4) "," (rtos (cadr p) 2 4) "," (rtos (if (caddr p) (caddr p) 0.0) 2 4)) ""))
@@ -24,6 +25,11 @@
   (write-line s f))
 (defun di-dump (path / f b e ed own n typ lay)
   (setq f (open path "w" "utf8") n 0)
+  (write-line (strcat "#DWG\t" (getvar "DWGNAME")) f)
+  (write-line (strcat "#PATH\t" (getvar "DWGPREFIX")) f)
+  (write-line (strcat "#UNITS\t" (itoa (getvar "INSUNITS"))) f)
+  (write-line (strcat "#EXTMIN\t" (di-p (getvar "EXTMIN"))) f)
+  (write-line (strcat "#EXTMAX\t" (di-p (getvar "EXTMAX"))) f)
   (setq b (tblnext "BLOCK" T))
   (while b
     (setq own (cdr (assoc 2 b)) e (cdr (assoc -2 b)))

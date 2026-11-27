@@ -12,6 +12,8 @@ import argparse
 import json
 import math
 import re
+import sys as _sys
+_sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # Windows console is cp1252: Cyrillic layer names
 
 UNIT = {'mm': 0.001, 'cm': 0.01, 'm': 1.0}
 LABEL = re.compile(r'^\s*[Hh]\s*=\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?\s*$')

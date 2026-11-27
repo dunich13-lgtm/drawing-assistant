@@ -41,7 +41,18 @@ root group and rebuilds it, as one undo step.
 No PDF plotting: dimensions come from DIMENSION entities (`D` rows / `dims.csv`), and the model is
 checked visually with SketchUp renders.
 
-**First look at an unknown drawing:**
+**Project setup (NIN-6) — do this first for every project:**
+```powershell
+& tools\acad\acad_inventory_all.ps1 -Project <name>          # dumps every open drawing (plan + section DWGs)
+python tools\project_setup.py <name>                          # proposes layermap.json + project.json + questions
+python tools\project_setup.py <name> --layer "A-WALL=object" --layer "SKULPT=object:3.2" --profile building --zero 0
+python tools\project_setup.py <name> --confirm                # only after the user said yes
+```
+Output in `data/<name>/`: `layermap.json` (role per layer, reason, confidence, optional height rule),
+`project.json` (units, scale to m, ±0.00 + source, gap tolerance, profile), `setup_summary.md`.
+Unknown layers block the confirmation. Never confirm on the user's behalf.
+
+**First look at an unknown drawing (manual):**
 ```powershell
 & tools\acad\acad_run_lisp.ps1 -Lisp dwg_inventory.lsp -Call '(di-dump "{OUT}")' -Out dwg_inventory.tsv
 python tools\dwg_inventory.py data\dwg_inventory.tsv

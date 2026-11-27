@@ -36,8 +36,10 @@ function Get-AcadDoc([string]$DocName) {
 }
 
 function Get-DataPath([string]$name) {
-    if (-not (Test-Path $script:DataDir)) { New-Item -ItemType Directory $script:DataDir | Out-Null }
-    Join-Path $script:DataDir $name
+    $p = Join-Path $script:DataDir $name
+    $dir = Split-Path $p -Parent
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory $dir -Force | Out-Null }
+    $p
 }
 
 function Write-Tsv([string]$name, $lines) {

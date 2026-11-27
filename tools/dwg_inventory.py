@@ -13,15 +13,34 @@ import csv
 import os
 import re
 import sys
+import sys as _sys
+_sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # Windows console is cp1252: Cyrillic layer names
 
 BS = chr(92)
+
+
+UNITS = {0: 'unitless', 1: 'in', 2: 'ft', 4: 'mm', 5: 'cm', 6: 'm'}
+UNIT_TO_M = {'mm': 0.001, 'cm': 0.01, 'm': 1.0, 'in': 0.0254, 'ft': 0.3048}
+
+
+def load_meta(path):
+    """Header lines written by dwg_inventory.lsp: #DWG, #PATH, #UNITS, #EXTMIN, #EXTMAX."""
+    meta = {}
+    for line in open(path, encoding='utf-8-sig'):
+        if not line.startswith('#'):
+            break
+        k, _, v = line.rstrip('\n').partition('\t')
+        meta[k[1:].lower()] = v
+    if 'units' in meta:
+        meta['units'] = UNITS.get(int(meta['units']), f"code {meta['units']}")
+    return meta
 
 
 def load(path):
     rows = []
     for line in open(path, encoding='utf-8-sig'):
         line = line.rstrip('\n')
-        if line.startswith('#DONE'):
+        if line.startswith('#'):
             continue
         parts = line.split('\t')
         if len(parts) < 4 and rows:          # MTEXT with a hard newline: continuation of the previous row
