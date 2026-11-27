@@ -102,5 +102,14 @@ tabs (use `\t` in strings), every prompt answered. Output files are opened with 
 |---|---|
 | `tools/acad/` | AutoCAD readers: `AcadCommon.ps1` (shared), `acad_*.ps1` (COM), `*.lsp` + `acad_run_lisp.ps1` |
 | `tools/sketchup/` | `su_bridge.rb`, `su_query.ps1`, `su_build_base.rb`, `su_inspect.rb`, `su_shots.rb` |
-| `tools/*.py` | `geom.py` (parse dumps, hatch loops, bulges), `dwg_inventory.py` (drawing summary) |
+| `tools/*.py` | `geom.py` (parse dumps, hatch loops, bulges), `dwg_inventory.py` (drawing summary), `massing_from_labels.py` (closed shapes + "H=..m" labels → extrusion data) |
+
+## Recipe: massing model from height labels (tested 2026-11-27)
+```powershell
+& tools\acad\acad_list_docs.ps1                                   # note the drawing units
+& tools\acad\acad_layer_dump.ps1 -Layers '*' -Out massing_src      # or only the massing layers
+python tools\massing_from_labels.py data\massing_src.tsv data\massing.json --units cm
+& tools\sketchup\su_query.ps1 -Code "SuBridge.use('su_massing'); SuMassing.run"
+```
+Then verify: `SuInspect.probe_down(x, y, 100)` at each label (top = labelled height) and renders.
 | `data/`, `views/`, `bridge/` | Working data, renders, bridge queues — gitignored, never pushed (client data) |
