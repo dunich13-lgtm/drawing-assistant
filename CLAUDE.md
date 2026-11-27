@@ -10,6 +10,14 @@ This folder holds the И4 course work (source: maitapp.com/i4/programa/day0/).
 - `.env` — secret keys (Gemini, OpenRouter). **Never commit it, never print it.** `.env.example` shows the variable names.
 - `scripts/check-ai-keys.ps1` — checks both keys with one tiny free request each.
 
+## Two build paths
+- **Path 1: PDF/DXF → Revit (BIM, documents)** via the EE engine (`C:\EE_engine`). Spec: `specs/001`.
+- **Path 2: AutoCAD drawing → SketchUp (visual model only).** Read `docs/pipeline-autocad-sketchup.md`
+  before any AutoCAD or SketchUp work. Tools in `tools/acad/`, `tools/sketchup/`, `tools/*.py`.
+- AutoCAD: READ-ONLY, never modify or save a DWG. If AutoCAD is busy, ask the user to press Esc; don't retry in a loop.
+- SketchUp: changes only through re-runnable builders (`su_build_base.rb`); don't save the model unless asked.
+- `data/`, `views/`, `bridge/` hold client project data: gitignored, never commit or upload them.
+
 ## Second brain: Meta-brain (Obsidian vault)
 - `Meta-brain/` is its own Obsidian vault. Claude reads/writes it as plain files in this folder.
 - It is LOCAL ONLY (gitignored, user's choice): never commit, push or upload its notes.
@@ -41,7 +49,7 @@ This folder holds the И4 course work (source: maitapp.com/i4/programa/day0/).
 
 ## Placeholders (details to come)
 - implement-spec workflow: Matt Pocock's `/implement-spec` skill (installed globally) — builds what `/to-spec` + `/to-tickets` produced. Course-specific details: TODO
-- Ник's system: TODO
+- Ник's system: most likely Nick's AutoCAD → SketchUp pipeline (code came from his "Курс" folder, Linear-style FAR-xx tasks). Generic core rebuilt here as Path 2 — see `docs/pipeline-autocad-sketchup.md`. Not 100% confirmed by the course.
 - Sandcastle: TODO
 - JEV (judge that runs on OpenRouter): TODO
 - Notes from the 5-minute video: TODO
