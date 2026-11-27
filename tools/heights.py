@@ -4,7 +4,8 @@ For each area that may be built (plan views and untitled views; sections/elevati
 BASE and HEIGHT are resolved separately; the first source that has a value wins:
   1. label inside the area        "H=56m", "h = 12.5 m", "Н=560см" (Cyrillic Н too) -> height
                                    "Z=+3.20", "B=0.45 m", "база=..."                 -> base
-  2. section / elevation          (NIN-9, not yet)
+  2. section / elevation          a level scale in a section/facade (tools/sections.py) with a mark at the plan's
+                                   level: base = that mark, height = the next mark up ("РАЗРЕЗ А-А: +2.80 -> +5.60")
   3. layer rule                    layermap.json height_rule / base_rule (metres)
   4. Claude's proposal, CONFIRMED  base = level in the view title ("План етаж 2 / кота +2.80");
                                    height = distance to the next plan level (+5.60 - +2.80 = 2.80)
@@ -75,8 +76,26 @@ def read_labels(project, k):
     return labels
 
 
-def resolve(areas, views, labels, layermap, answers, profile):
-    """Pure function: returns {area_id: result}, questions, conflicts."""
+def section_levels(sections, plan_level):
+    """Source 2: a section/facade level scale that has a mark at this plan's level (±1 cm).
+    -> (base, base_source, height, height_source) or None. Prefers a titled section (РАЗРЕЗ) over facades."""
+    hits = [s for s in sections if any(abs(m - plan_level) <= 0.01 for m in s['levels'])]
+    if not hits:
+        return None
+    hits.sort(key=lambda s: (0 if re.search(r'разрез|section|schnitt', s['title'], re.I) else
+                             1 if not s['title'].startswith('untitled') else 2, s['id']))
+    s = hits[0]
+    more = f' (+{len(hits) - 1} more level scales agree)' if len(hits) > 1 else ''
+    base = (plan_level, f"section '{s['title']}' ({s['id']}): mark {plan_level:+.2f}{more}")
+    above = [m for m in s['levels'] if m > plan_level + 0.01]
+    height = (round(min(above) - plan_level, 4),
+              f"section '{s['title']}' ({s['id']}): marks {plan_level:+.2f} -> {min(above):+.2f}{more}") if above else None
+    return base, height
+
+
+def resolve(areas, views, labels, layermap, answers, profile, sections=None):
+    """Pure function: returns {area_id: result}, questions, conflicts.
+    sections: level scales from tools/sections.py (height source 2)."""
     vkind = {v['id']: v['kind'] for v in views}
     skipped = set(answers.get('skipped_views', []))       # views the user chose not to build (roof plan, detail fragments)
     buildable = [a for a in areas if vkind.get(a['view']) not in ('section', 'elevation') and a['view'] not in skipped]
@@ -121,6 +140,12 @@ def resolve(areas, views, labels, layermap, answers, profile):
         for lb in by_area.get(aid, []):
             src = f"label '{lb['text']}' (layer {lb['layer']}, handle {lb['handle']})" + ('' if lb['unit_given'] else ', unit assumed m')
             cand[lb['kind']].append((1, lb['value'], src))
+        if sections and a['view'] in vlevel:
+            sec = section_levels(sections, vlevel[a['view']][0])
+            if sec:
+                cand['base'].append((2, sec[0][0], sec[0][1]))
+                if sec[1]:
+                    cand['height'].append((2, sec[1][0], sec[1][1]))
         for lay in a['layers'][:1]:
             rule = layermap.get(lay, {})
             if rule.get('height_rule') is not None:
@@ -211,7 +236,10 @@ def main():
         json.dump(answers, open(apath, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 
     labels = read_labels(a.project, ar['units_to_m'])
-    results, questions, conflicts, proposal = resolve(ar['areas'], ar['views'], labels, lm['layers'], answers, pj.get('profile'))
+    spath = os.path.join(pdir, 'sections.json')
+    sections = json.load(open(spath, encoding='utf-8'))['views'] if os.path.exists(spath) else []
+    results, questions, conflicts, proposal = resolve(ar['areas'], ar['views'], labels, lm['layers'], answers,
+                                                      pj.get('profile'), sections)
     json.dump({'project': a.project, 'zero_level': pj.get('zero_level'), 'answers': answers, 'labels_found': len(labels),
                'proposals': {v: {k2: {'value': x, 'source': s} for k2, (x, s) in p.items()} for v, p in proposal.items()},
                'areas': results, 'questions': questions, 'conflicts': conflicts},
