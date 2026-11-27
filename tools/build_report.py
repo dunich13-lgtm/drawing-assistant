@@ -43,6 +43,10 @@ def main(project, verify=None):
            f"(data/{project}/openings_answers.json); balcony doors to the floor are not told apart from windows yet",
            f"- window/door objects: {b['counts'].get('window_door_parts', 0)} parts (window = frame + glass, door = frame + "
            'closed leaf, passages left open); simple generic shapes, not the real window types',
+           *([f"- stairs: left out ({json.load(open(os.path.join(pdir, 'building_answers.json'), encoding='utf-8'))['stairs_left_out']})"]
+             if os.path.exists(os.path.join(pdir, 'building_answers.json')) and
+             json.load(open(os.path.join(pdir, 'building_answers.json'), encoding='utf-8')).get('stairs_left_out') else
+             ['- stairs: built from the plan drawings (see stairs.json); "PLEASE CHECK" where steps were added past the drawn end']),
            f"- slabs: {b['counts'].get('slabs', 0)}, thickness confirmed or measured in the sections, top at each floor level; "
            'walls still run floor-to-floor (they overlap the slab above by its thickness)']
     out = os.path.join(pdir, 'build_report.md')

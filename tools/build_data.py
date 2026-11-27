@@ -287,7 +287,9 @@ def main():
     # ---- stairs (NIN-14): stepped solids + landings from tools/stairs.py, moved with their floor ---------------
     stair_parts = 0
     spath = os.path.join(pdir, 'stairs.json')
-    if os.path.exists(spath):
+    if bans.get('stairs_left_out'):
+        print(f"stairs left out: {bans['stairs_left_out']}")
+    elif os.path.exists(spath):
         smat = ['DWG stair', [205, 200, 190], None]
         for sc in json.load(open(spath, encoding='utf-8'))['staircases']:
             o = offsets.get(sc['view'])
