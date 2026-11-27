@@ -69,11 +69,13 @@ one way of drawing**: a wall can be 4 loose lines, a hatched rectangle, or open/
 4. Plan render at the cut height overlays the DWG within ±1 cm; re-running rebuilds, Ctrl+Z removes a whole build.
 5. Nothing from `data/`, `views/`, `bridge/` reaches GitHub.
 
-## Ticket outline (for `/to-tickets`)
-1. Project setup: inventory of open drawings, layer map + project.json proposal and confirmation (R1)
-2. Area finder: network, gap joining, crossings, closed areas with holes, report (R2) — with the mixed-style test DXF
-3. Heights from labels + layer rules + questions (R3, part 1)
-4. Heights from sections/elevations: views, level marks, vertical dims, cut-line linking (R3, part 2)
-5. Generic object builder + verify/report (R4, R6)
-6. Building profile: walls/slabs, openings, floors (R5)
-7. End-to-end run on the user's real drawing (acceptance 2–4)
+## Tickets (Linear, project "Drawing assistant", created 2026-11-27)
+| Ticket | Work | Blocked by |
+|---|---|---|
+| NIN-6 | Project setup: inventory of open drawings, layer map + project.json (R1) | — |
+| NIN-7 | Area finder: network, gap joining, crossings, closed areas with holes, report (R2) | NIN-6 |
+| NIN-8 | Heights from labels + layer rules + questions (R3, part 1) | NIN-7 |
+| NIN-9 | Heights from sections/elevations (R3, part 2) | NIN-8 |
+| NIN-10 | Generic object builder + verify/report (R4, R6) | NIN-8 |
+| NIN-11 | Building profile: walls/slabs, openings, floors (R5) | NIN-9, NIN-10 |
+| NIN-12 | End-to-end run on the user's real drawing (acceptance 2–4) | NIN-9, NIN-10 |
